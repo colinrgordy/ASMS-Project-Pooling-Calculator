@@ -34,6 +34,12 @@ def process_sdf(file_path):
             
         try:
             exact_mass = Descriptors.ExactMolWt(mol)
+            smiles = Chem.MolToSmiles(mol)
+            
+            # 🛡️ DEFENSIVE GUARD: Skip empty records with no structural atoms, mass, or SMILES
+            if exact_mass == 0 or not smiles or smiles.strip() == "":
+                continue
+                
             has_base = mol.HasSubstructMatch(basic_nitrogen)
             has_acid = mol.HasSubstructMatch(acidic_group)
             
@@ -52,7 +58,7 @@ def process_sdf(file_path):
                 'Exact_Mass': exact_mass,
                 'Target_m_z': target_mz,
                 'Predicted_Mode': predicted_mode,
-                'SMILES': Chem.MolToSmiles(mol)
+                'SMILES': smiles
             })
         except:
             continue
@@ -63,7 +69,7 @@ def assign_384_wells(df, pool_size=10):
     
     # 384-well plate geometry mapping
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
-    columns = range(1, 25)
+    columns = range(1, 24)
     well_coordinates = [f"{r}{c:02d}" for r in rows for c in columns]
     
     current_plate = 1
@@ -112,7 +118,7 @@ def assign_384_wells(df, pool_size=10):
 if uploaded_file is not None:
     with st.spinner("Parsing chemical structures and generating optimal layout..."):
         
-        # ✨ THE LOCAL FIX: Write the file directly inside your project folder
+        # Write the file directly inside your project folder
         local_tmp_path = "temp_upload_data.sdf"
         with open(local_tmp_path, "wb") as f:
             f.write(uploaded_file.getvalue())
