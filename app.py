@@ -103,7 +103,7 @@ def assign_384_wells(df, pool_size=10, prefix="ASMS"):
             
             for sub_idx, comp in enumerate(pool):
                 pooled_records.append({
-                    'Destination_Plate': f"{clean_prefix}_{mode.upper()}_PLT_{current_plate}",
+                    'Destination_Plate': f"{clean_prefix}_PLT_{current_plate}",  # 🛠️ FIXED: Standardized unified plate tracking label
                     'Destination_Well': assigned_well,
                     'Well_Sub_Index': sub_idx + 1,
                     'SAMPLE_ID': comp['SAMPLE_ID'],
@@ -132,21 +132,20 @@ def generate_interactive_html(df):
         try:
             mol = Chem.MolFromSmiles(row['SMILES'])
             if mol:
-                # 🛡️ Upgrade to modern, segfault-safe C++ SVG rendering pipeline
                 drawer = rdMolDraw2D.MolDraw2DSVG(160, 160)
                 clean_mol = rdMolDraw2D.PrepareMolForDrawing(mol)
                 drawer.DrawMolecule(clean_mol)
                 drawer.FinishDrawing()
                 svg_text = drawer.GetDrawingText()
         except:
-            svg_text = ""  # Safe fallback if molecule fails processing entirely
+            svg_text = ""
             
         plate_data_dict[plt][well].append({
             'id': row['SAMPLE_ID'],
             'mass': row['Exact_Mass'],
             'mz': row['Target_m_z'],
             'smiles': row['SMILES'],
-            'img': svg_text  # Encodes raw inline SVG text safely
+            'img': svg_text
         })
         
     js_data_payload = json.dumps(plate_data_dict)
@@ -158,7 +157,7 @@ def generate_interactive_html(df):
     <title>NCATS ASMS Interactive Plate Mapper</title>
     <style>
         body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 20px; color: #333; }}
-        .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e9ecef; padding-bottom: 15px; margin-bottom: 20px; }}
+        .header {{ display: flex; justify-space-between; align-items: center; border-bottom: 2px solid #e9ecef; padding-bottom: 15px; margin-bottom: 20px; }}
         h1 {{ margin: 0; font-size: 24px; color: #1e293b; }}
         select {{ padding: 8px 16px; font-size: 16px; border-radius: 6px; border: 1px solid #cbd5e1; outline: none; background: white; cursor: pointer; }}
         .main-container {{ display: flex; gap: 24px; align-items: flex-start; }}
@@ -182,7 +181,7 @@ def generate_interactive_html(df):
 </head>
 <body>
 
-    <div class="header">
+    <div class="header" style="display: flex; justify-content: space-between; width: 100%;">
         <h1>NCATS ASMS Interactive Pool Navigator</h1>
         <select id="plateSelect" onchange="renderPlate()"></select>
     </div>
@@ -275,7 +274,6 @@ def generate_interactive_html(df):
                 let imgDiv = document.createElement('div');
                 imgDiv.className = 'struct-img';
                 if(c.img && c.img.trim() !== "") {{
-                    // Directly inject native inline vector SVG text
                     imgDiv.innerHTML = c.img;
                 }} else {{
                     imgDiv.innerHTML = `<span style="color:#cbd5e1; font-size:11px;">No Structure</span>`;
