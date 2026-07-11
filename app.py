@@ -1,9 +1,8 @@
 import streamlit as st
 import pandas as pd
 from rdkit import Chem
-from rdkit.Chem import Descriptors, Draw
-import base64
-from io import BytesIO
+from rdkit.Chem import Descriptors
+from rdkit.Chem.Draw import rdMolDraw2D
 import os
 
 st.set_page_config(page_title="AS-MS Pooling Engine", page_icon="🧪", layout="wide")
@@ -35,7 +34,7 @@ def process_sdf(file_path):
         if not sample_id: 
             sample_id = f"UNKNOWN_{idx}"
         else:
-            # ✂️ STRIP BATCH NUMBER: Cleans trailing suffixes (e.g., NCGC00091454-07 -> NCGC00091454)
+            # Strip batch numbers (e.g., NCGC00091454-07 -> NCGC00091454)
             if '-' in str(sample_id):
                 sample_id = str(sample_id).split('-')[0]
             
@@ -129,23 +128,25 @@ def generate_interactive_html(df):
         if well not in plate_data_dict[plt]:
             plate_data_dict[plt][well] = []
             
-        b64_img = ""
+        svg_text = ""
         try:
             mol = Chem.MolFromSmiles(row['SMILES'])
             if mol:
-                img = Draw.MolToImage(mol, size=(160, 160))
-                buffered = BytesIO()
-                img.save(buffered, format="PNG")
-                b64_img = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                # 🛡️ Upgrade to modern, segfault-safe C++ SVG rendering pipeline
+                drawer = rdMolDraw2D.MolDraw2DSVG(160, 160)
+                clean_mol = rdMolDraw2D.PrepareMolForDrawing(mol)
+                drawer.DrawMolecule(clean_mol)
+                drawer.FinishDrawing()
+                svg_text = drawer.GetDrawingText()
         except:
-            pass
+            svg_text = ""  # Safe fallback if molecule fails processing entirely
             
         plate_data_dict[plt][well].append({
             'id': row['SAMPLE_ID'],
             'mass': row['Exact_Mass'],
             'mz': row['Target_m_z'],
             'smiles': row['SMILES'],
-            'img': b64_img
+            'img': svg_text  # Encodes raw inline SVG text safely
         })
         
     js_data_payload = json.dumps(plate_data_dict)
@@ -175,7 +176,7 @@ def generate_interactive_html(df):
         .compound-info {{ flex: 1; font-size: 13px; }}
         .compound-id {{ font-size: 15px; font-weight: bold; color: #2563eb; margin-bottom: 4px; }}
         .struct-img {{ width: 130px; height: 130px; background: white; border: 1px solid #e2e8f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; }}
-        .struct-img img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
+        .struct-img img, .struct-img svg {{ max-width: 100%; max-height: 100%; }}
         .placeholder-text {{ color: #94a3b8; font-style: italic; text-align: center; margin-top: 50px; }}
     </style>
 </head>
@@ -273,8 +274,9 @@ def generate_interactive_html(df):
                 
                 let imgDiv = document.createElement('div');
                 imgDiv.className = 'struct-img';
-                if(c.img) {{
-                    imgDiv.innerHTML = `<img src="data:image/png;base64,${{c.img}}" />`;
+                if(c.img && c.img.trim() !== "") {{
+                    // Directly inject native inline vector SVG text
+                    imgDiv.innerHTML = c.img;
                 }} else {{
                     imgDiv.innerHTML = `<span style="color:#cbd5e1; font-size:11px;">No Structure</span>`;
                 }}
