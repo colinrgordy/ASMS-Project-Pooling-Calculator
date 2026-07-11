@@ -31,7 +31,13 @@ def process_sdf(file_path):
             if mol.HasProp(prop_name):
                 sample_id = mol.GetProp(prop_name)
                 break
-        if not sample_id: sample_id = f"UNKNOWN_{idx}"
+        
+        if not sample_id: 
+            sample_id = f"UNKNOWN_{idx}"
+        else:
+            # ✂️ STRIP BATCH NUMBER: Cleans trailing suffixes (e.g., NCGC00091454-07 -> NCGC00091454)
+            if '-' in str(sample_id):
+                sample_id = str(sample_id).split('-')[0]
             
         try:
             exact_mass = Descriptors.ExactMolWt(mol)
@@ -65,7 +71,6 @@ def process_sdf(file_path):
             continue
     return pd.DataFrame(data)
 
-# 🌟 Updated to accept a custom plate naming prefix
 def assign_384_wells(df, pool_size=10, prefix="ASMS"):
     pooled_records = []
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
@@ -75,7 +80,6 @@ def assign_384_wells(df, pool_size=10, prefix="ASMS"):
     current_plate = 1
     well_pointer = 0
     
-    # Sanitize prefix input to remove trailing/leading whitespace or extra underscores
     clean_prefix = prefix.strip().rstrip('_')
     
     for mode, group in df.groupby('Predicted_Mode'):
@@ -304,7 +308,6 @@ if uploaded_file is not None:
             os.remove(local_tmp_path)
         
         if not raw_df.empty:
-            # 🌟 Passes your dynamic input box text directly to the generator
             final_map = assign_384_wells(raw_df, pool_size=10, prefix=plate_prefix)
             final_map = final_map.sort_values(by=['Destination_Plate', 'Target_m_z']).reset_index(drop=True)
             
