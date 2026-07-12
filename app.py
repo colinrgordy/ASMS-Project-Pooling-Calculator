@@ -146,7 +146,7 @@ def generate_interactive_html(df):
             'mz': row['Target_m_z'],
             'smiles': row['SMILES'],
             'img': svg_text,
-            'mode': row['Ionization_Mode']  # 🌟 Track ionization mode parameter per pool
+            'mode': row['Ionization_Mode']
         })
         
     js_data_payload = json.dumps(plate_data_dict)
@@ -163,23 +163,16 @@ def generate_interactive_html(df):
         select {{ padding: 8px 16px; font-size: 16px; border-radius: 6px; border: 1px solid #cbd5e1; outline: none; background: white; cursor: pointer; }}
         .main-container {{ display: flex; gap: 24px; align-items: flex-start; }}
         .plate-box {{ background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }}
-        
-        /* Legend styles */
         .map-legend {{ display: flex; gap: 24px; margin-bottom: 20px; font-size: 13px; font-weight: 600; justify-content: center; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; }}
         .legend-item {{ display: flex; align-items: center; gap: 8px; }}
-        
         .grid-384 {{ display: grid; grid-template-columns: 30px repeat(24, 26px); gap: 4px; align-items: center; justify-items: center; }}
         .col-header {{ font-size: 11px; font-weight: bold; color: #64748b; text-align: center; width: 26px; }}
         .row-header {{ font-size: 11px; font-weight: bold; color: #64748b; text-align: center; height: 26px; display: flex; align-items: center; justify-content: center; }}
-        
-        /* Well core styles & dynamic ionization modes */
         .well {{ width: 22px; height: 22px; border-radius: 50%; background-color: #f1f5f9; border: 1px solid #cbd5e1; cursor: pointer; transition: all 0.15s ease; position: relative; }}
-        .well.populated.positive {{ background-color: #bfdbfe; border-color: #3b82f6; }} /* Soft Blue */
-        .well.populated.negative {{ background-color: #fecdd3; border-color: #f43f5e; }} /* Soft Pink/Rose */
-        
+        .well.populated.positive {{ background-color: #bfdbfe; border-color: #3b82f6; }}
+        .well.populated.negative {{ background-color: #fecdd3; border-color: #f43f5e; }}
         .well:hover {{ transform: scale(1.2); border-color: #475569 !important; box-shadow: 0 0 4px rgba(0,0,0,0.2); z-index: 10; }}
         .well.active-well {{ border-color: #1e3a8a !important; background-color: #eff6ff !important; box-shadow: 0 0 0 3px #3b82f6; }}
-        
         .display-panel {{ flex: 1; min-width: 400px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; max-height: 85vh; overflow-y: auto; }}
         .panel-title {{ font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }}
         .compound-card {{ display: flex; align-items: center; gap: 15px; padding: 12px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }}
@@ -192,14 +185,13 @@ def generate_interactive_html(df):
 </head>
 <body>
 
-    <div class="header">
+    <div class="header" style="display: flex; justify-content: space-between; width: 100%;">
         <h1>NCATS ASMS Interactive Pool Navigator</h1>
         <select id="plateSelect" onchange="renderPlate()"></select>
     </div>
 
     <div class="main-container">
         <div class="plate-box">
-            <!-- 🌟 Visual Map Legend Header -->
             <div class="map-legend">
                 <div class="legend-item">
                     <div style="width: 14px; height: 14px; border-radius: 50%; background-color: #fecdd3; border: 1px solid #f43f5e;"></div>
@@ -262,11 +254,8 @@ def generate_interactive_html(df):
                     const dynamicData = db[currentPlate] && db[currentPlate][wellName];
                     if (dynamicData) {{
                         wellDiv.classList.add('populated');
-                        
-                        // 🌟 Extract the ionization mode of the well pool to color class
                         const wellMode = dynamicData[0].mode; 
                         wellDiv.classList.add(wellMode);
-                        
                         wellDiv.title = wellName + " (" + wellMode.toUpperCase() + " Mode - " + dynamicData.length + " compounds)";
                         wellDiv.onclick = () => selectWell(wellName, dynamicData, wellDiv);
                     }} else {{
@@ -281,7 +270,6 @@ def generate_interactive_html(df):
             document.querySelectorAll('.well').forEach(w => w.classList.remove('active-well'));
             element.classList.add('active-well');
             
-            // 🌟 Display the specific Ionization Polarity inside the inspector title header
             const wellModeLabel = compounds[0].mode.toUpperCase();
             document.getElementById('panelTitle').innerHTML = "Contents of Well: " + wellName + " (" + wellModeLabel + " Mode)";
             
@@ -339,7 +327,9 @@ if uploaded_file is not None:
         
         if not raw_df.empty:
             final_map = assign_384_wells(raw_df, pool_size=10, prefix=plate_prefix)
-            final_map = final_map.sort_values(by=['Destination_Plate', 'Target_m_z']).reset_index(drop=True)
+            
+            # 🛠️ FIXED: Sort by Plate, then Ionization Mode (negative alphabetical order comes before positive), then Mass
+            final_map = final_map.sort_values(by=['Destination_Plate', 'Ionization_Mode', 'Target_m_z']).reset_index(drop=True)
             
             html_raw_data = final_map.copy()
             
