@@ -44,4 +44,4 @@ Developed to eliminate manual calculations and complex plate-mapping errors in h
 
 ---
 
-Made by Colin Gordy[span_31](start_span)[span_31](end_span)
+Made by Colin Gordy [span_31](start_span)[span_31](end_span)
