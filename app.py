@@ -143,6 +143,7 @@ def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_co
                     'Destination_Well': assigned_well,
                     'Well_Sub_Index': sub_idx + 1,
                     'Compounds_In_Pool': actual_pool_count,
+                    'Backflush_Required': "YES" if dmso_backflush_nl > 0 else "NO",
                     'NCGC_ID': comp['SAMPLE_ID'],
                     'Exact_Mass': round(comp['Exact_Mass'], 4),
                     'Target_m_z': round(comp['Target_m_z'], 4),
@@ -184,7 +185,8 @@ def generate_interactive_html(df):
             'mz': row['Target_m_z'],
             'smiles': row['SMILES'],
             'img': svg_text,
-            'mode': row['Ionization_Mode']
+            'mode': row['Ionization_Mode'],
+            'backflush': int(row['DMSO_Backflush_Volume_nL'])
         })
         
     js_data_payload = json.dumps(plate_data_dict)
@@ -201,18 +203,20 @@ def generate_interactive_html(df):
         select {{ padding: 8px 16px; font-size: 16px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; }}
         .main-container {{ display: flex; gap: 24px; align-items: flex-start; }}
         .plate-box {{ background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }}
-        .map-legend {{ display: flex; gap: 24px; margin-bottom: 20px; font-size: 13px; font-weight: 600; justify-content: center; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; }}
+        .map-legend {{ display: flex; gap: 24px; margin-bottom: 20px; font-size: 13px; font-weight: 600; justify-content: center; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; flex-wrap: wrap; }}
         .legend-item {{ display: flex; align-items: center; gap: 8px; }}
         .grid-384 {{ display: grid; grid-template-columns: 30px repeat(24, 26px); gap: 4px; align-items: center; justify-items: center; }}
         .col-header {{ font-size: 11px; font-weight: bold; color: #64748b; text-align: center; width: 26px; }}
         .row-header {{ font-size: 11px; font-weight: bold; color: #64748b; text-align: center; height: 26px; display: flex; align-items: center; justify-content: center; }}
-        .well {{ width: 22px; height: 22px; border-radius: 50%; background-color: #f1f5f9; border: 1px solid #cbd5e1; cursor: pointer; transition: all 0.15s ease; }}
+        .well {{ width: 22px; height: 22px; border-radius: 50%; background-color: #f1f5f9; border: 1px solid #cbd5e1; cursor: pointer; transition: all 0.15s ease; box-sizing: border-box; }}
         .well.populated.positive {{ background-color: #bfdbfe; border-color: #3b82f6; }}
         .well.populated.negative {{ background-color: #fecdd3; border-color: #f43f5e; }}
+        .well.backflush-needed {{ border-style: dashed !important; border-width: 2px !important; }}
         .well:hover {{ transform: scale(1.2); border-color: #475569 !important; box-shadow: 0 0 4px rgba(0,0,0,0.2); z-index: 10; }}
         .well.active-well {{ border-color: #1e3a8a !important; background-color: #eff6ff !important; box-shadow: 0 0 0 3px #3b82f6; }}
         .display-panel {{ flex: 1; min-width: 400px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; max-height: 85vh; overflow-y: auto; }}
-        .panel-title {{ font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }}
+        .panel-title {{ font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }}
+        .backflush-tag {{ font-size: 12px; font-weight: bold; color: #b45309; background-color: #fef3c7; padding: 4px 10px; border-radius: 6px; border: 1px solid #fde68a; }}
         .compound-card {{ display: flex; align-items: center; gap: 15px; padding: 12px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }}
         .compound-info {{ flex: 1; font-size: 13px; }}
         .compound-id {{ font-size: 15px; font-weight: bold; color: #2563eb; margin-bottom: 4px; }}
@@ -236,6 +240,10 @@ def generate_interactive_html(df):
                 <div class="legend-item">
                     <div style="width: 14px; height: 14px; border-radius: 50%; background-color: #bfdbfe; border: 1px solid #3b82f6;"></div>
                     <span>Positive Pools</span>
+                </div>
+                <div class="legend-item">
+                    <div style="width: 14px; height: 14px; border-radius: 50%; background-color: #f1f5f9; border: 2px dashed #475569;"></div>
+                    <span>Dashed Border = Requires DMSO Back-flush</span>
                 </div>
             </div>
             <div id="gridContainer" class="grid-384"></div>
@@ -275,6 +283,9 @@ def generate_interactive_html(df):
                         wellDiv.classList.add('populated');
                         const wellMode = dynamicData[0].mode;
                         wellDiv.classList.add(wellMode);
+                        if(dynamicData[0].backflush > 0) {{
+                            wellDiv.classList.add('backflush-needed');
+                        }}
                         wellDiv.onclick = () => selectWell(wellName, dynamicData, wellDiv);
                     }}
                     container.appendChild(wellDiv);
@@ -284,17 +295,24 @@ def generate_interactive_html(df):
         function selectWell(wellName, compounds, element) {{
             document.querySelectorAll('.well').forEach(w => w.classList.remove('active-well'));
             element.classList.add('active-well');
-            document.getElementById('panelTitle').innerHTML = "Contents of Well: " + wellName + " (" + compounds[0].mode.toUpperCase() + " Mode)";
+            
+            const wellModeLabel = compounds[0].mode.toUpperCase();
+            let headerHTML = `<span>Contents of Well: ${{wellName}} (${{wellModeLabel}} Mode)</span>`;
+            if(compounds[0].backflush > 0) {{
+                headerHTML += `<span class="backflush-tag">⚠️ DMSO Back-flush: +${{compounds[0].backflush}} nL</span>`;
+            }}
+            document.getElementById('panelTitle').innerHTML = headerHTML;
+            
             const listContainer = document.getElementById('compoundsContainer');
             listContainer.innerHTML = '';
             compounds.forEach(c => {{
                 let card = document.createElement('div'); card.className = 'compound-card';
                 let info = document.createElement('div'); info.className = 'compound-info';
                 info.innerHTML = `
-                    <div class="compound-id">\${{c.id}}</div>
-                    <div><strong>Exact Mass:</strong> \${{c.mass.toFixed(4)}} Da</div>
-                    <div><strong>Target M/Z:</strong> \${{c.mz.toFixed(4)}}</div>
-                    <div style="margin-top:5px; color:#64748b; font-size:11px; word-break:break-all;"><strong>SMILES:</strong> \${{c.smiles}}</div>
+                    <div class="compound-id">${{c.id}}</div>
+                    <div><strong>Exact Mass:</strong> ${{c.mass.toFixed(4)}} Da</div>
+                    <div><strong>Target M/Z:</strong> ${{c.mz.toFixed(4)}}</div>
+                    <div style="margin-top:5px; color:#64748b; font-size:11px; word-break:break-all;"><strong>SMILES:</strong> ${{c.smiles}}</div>
                 `;
                 let imgDiv = document.createElement('div'); imgDiv.className = 'struct-img';
                 if(c.img) imgDiv.innerHTML = c.img;
@@ -391,7 +409,7 @@ if uploaded_file is not None:
             st.markdown("### Processed Plate Layout Preview")
             st.dataframe(
                 final_map[[
-                    'Destination_Plate', 'Destination_Well', 'Well_Sub_Index', 'Compounds_In_Pool', 
+                    'Destination_Plate', 'Destination_Well', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
                     'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_m_z_Delta_In_Well', 
                     'DMSO_Backflush_Volume_nL', 'Echo_Transfer_To_Destination_nL', 'Ionization_Mode'
                 ]], use_container_width=True
