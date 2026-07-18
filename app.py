@@ -47,7 +47,7 @@ with up_col1:
     uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
 
 with up_col2:
-    uploaded_inventory = st.file_uploader("Optional Upstream Link: Upload 1536 Master Plate Maps", type=["csv", "xlsx"], help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file.")
+    uploaded_inventory = st.file_uploader("Optional: Upload 1536 Master Plate Maps", type=["csv", "xlsx"], help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file.")
 
 # ==========================================
 # 3. Computational Core Functions
