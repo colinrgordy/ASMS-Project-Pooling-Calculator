@@ -491,13 +491,13 @@ if uploaded_file is not None:
             assay_coordinates = [f"{r}{c:02d}" for r in assay_rows for c in assay_cols]
             
             coordinate_mapping_index = {}
-            for idx, row_wells in unique_source_wells.iterrows():
+            for idx, r_wells in unique_source_wells.iterrows():
                 plate_idx = (idx // 96) + 1
                 well_idx = idx % 96
                 assigned_96_well = assay_coordinates[well_idx]
-                coordinate_mapping_index[(row_wells['Source_Plate_384'], row_wells['Source_Well_384'])] = (f"{plate_prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
+                coordinate_mapping_index[(r_wells['Source_Plate_384'], r_wells['Source_Well_384'])] = (f"{plate_prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
             
-            # 🛠️ FIXED: Secure scope handling mapping dictionary indexes cleanly
+            # Secure scope variables verified across all lambda lookups
             source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
             source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
             
@@ -509,8 +509,9 @@ if uploaded_file is not None:
             
             total_384_wells = len(source_map['Source_Well_384'].unique())
             
-            # 🛠️ FIXED: Counts absolute unique coordinates across your entire assay layout run
+            # Option B Analytics: Computes the precise ceiling count for the required final microplates
             total_96_wells = len(source_map[['Assay_Plate_96', 'Assay_Well_96']].drop_duplicates())
+            plates_needed = math.ceil(total_96_wells / 96)
             
             backflush_wells_count = source_map[source_map['Compounds_In_Pool'] < pool_size]['Source_Well_384'].nunique()
             
@@ -519,10 +520,10 @@ if uploaded_file is not None:
             dash_col1, dash_col2, dash_col3, dash_col4 = st.columns(4)
             dash_col1.metric("Total Library Compounds", len(raw_df))
             dash_col2.metric("384-Well Source Pools (Out 1)", total_384_wells)
-            dash_col3.metric("96-Well Assay Locations (Out 2)", total_96_wells)
+            dash_col3.metric("96-Well Plates Needed", plates_needed)
             dash_col4.metric("DMSO Back-Flush Actions", backflush_wells_count)
             
-            with st.expander("Click to view structural omissions and data anomalies"):
+            with st.expander("🔍 Click to view structural omissions and data anomalies"):
                 if not skipped_df.empty:
                     st.warning(f"Total entries filtered out from raw input file: {len(skipped_df)}")
                     st.dataframe(skipped_df, use_container_width=True)
