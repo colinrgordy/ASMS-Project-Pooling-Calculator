@@ -8,9 +8,9 @@ import io
 import math
 import json
 
-st.set_page_config(page_title="AS-MS Pooling Engine", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="ASMS Pooling Engine", page_icon="🧪", layout="wide")
 
-st.title("NCATS ASMS Advanced Pooling Engine")
+st.title("NCATS ASMS Compound Pooling Engine")
 st.markdown("Created by Colin Gordy for use in the development of a semi-automated, small-molecule binders discovery assay utilizing HRMS. This tool automates multi-stage HTS workflows: Compiles 1536-well library entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates. Using .SDF files containing NCGC IDs and SMILES, the tool returns three output files: (1) A .xlsx Echo script for creating an acoustic 384-well source plate with the 1536-well CoMa library plates, (2) A .xlsx Echo script for using the 384-well acoustic source plate and standard, 96-well KingFisher Flex plates as the destination, (3) A .HTML file for an interactive visualization of both plate maps. Parameters can be customized using the side toolbar.")
 
 # ==========================================
