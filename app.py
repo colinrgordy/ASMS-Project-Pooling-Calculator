@@ -11,7 +11,7 @@ import json
 st.set_page_config(page_title="AS-MS Pooling Engine", page_icon="🧪", layout="wide")
 
 st.title("NCATS ASMS Advanced Pooling Engine")
-st.markdown("Automates multi-stage HTS workflows: Compiles 1536-well library entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates.")
+st.markdown("Created by Colin Gordy for use in the development of a semi-automated ASMS, small-molecular binders assay platform. This tool automates multi-stage HTS workflows: Compiles 1536-well library entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates.")
 
 # ==========================================
 # 1. Sidebar Control Panel
@@ -523,7 +523,7 @@ if uploaded_file is not None:
             dash_col3.metric("96-Well Plates Needed", plates_needed)
             dash_col4.metric("DMSO Back-Flush Actions", backflush_wells_count)
             
-            with st.expander("🔍 Click to view structural omissions and data anomalies"):
+            with st.expander("Click to view structural omissions and data anomalies"):
                 if not skipped_df.empty:
                     st.warning(f"Total entries filtered out from raw input file: {len(skipped_df)}")
                     st.dataframe(skipped_df, use_container_width=True)
