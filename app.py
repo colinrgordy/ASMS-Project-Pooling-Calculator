@@ -127,7 +127,7 @@ def process_sdf(file_path):
 def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_conc):
     pooled_records = []
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
-    columns = range(1, 25) # 24 Columns Absolute (1 through 24 inclusive)
+    columns = range(1, 25) 
     well_coordinates = [f"{r}{c:02d}" for r in rows for c in columns]
     
     current_plate = 1
@@ -471,7 +471,7 @@ if uploaded_file is not None:
         with open(local_tmp_path, "wb") as f:
             f.write(uploaded_file.getvalue())
             
-        raw_df, skipped_df = process_sdf(local_tmp_path)
+        raw_df, skipped_df = process_sdf(file_path=local_tmp_path)
         if os.path.exists(local_tmp_path): os.remove(local_tmp_path)
         
         if not raw_df.empty:
@@ -497,7 +497,7 @@ if uploaded_file is not None:
                 assigned_96_well = assay_coordinates[well_idx]
                 coordinate_mapping_index[(row_wells['Source_Plate_384'], row_wells['Source_Well_384'])] = (f"{plate_prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
             
-            # 🛠️ FIXED: Scope variables updated to 'r' keys to prevent layout duplication glitches
+            # 🛠️ FIXED: Secure scope handling mapping dictionary indexes cleanly
             source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
             source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
             
@@ -508,7 +508,10 @@ if uploaded_file is not None:
             source_map = source_map.sort_values(by=['Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index']).reset_index(drop=True)
             
             total_384_wells = len(source_map['Source_Well_384'].unique())
-            total_96_wells = len(source_map['Assay_Well_96'].unique())
+            
+            # 🛠️ FIXED: Counts absolute unique coordinates across your entire assay layout run
+            total_96_wells = len(source_map[['Assay_Plate_96', 'Assay_Well_96']].drop_duplicates())
+            
             backflush_wells_count = source_map[source_map['Compounds_In_Pool'] < pool_size]['Source_Well_384'].nunique()
             
             st.success("HTS Screening manifests successfully generated!")
@@ -519,7 +522,7 @@ if uploaded_file is not None:
             dash_col3.metric("96-Well Assay Locations (Out 2)", total_96_wells)
             dash_col4.metric("DMSO Back-Flush Actions", backflush_wells_count)
             
-            with st.expander("🔍 Click to view structural omissions and data anomalies"):
+            with st.expander("Click to view structural omissions and data anomalies"):
                 if not skipped_df.empty:
                     st.warning(f"Total entries filtered out from raw input file: {len(skipped_df)}")
                     st.dataframe(skipped_df, use_container_width=True)
@@ -571,7 +574,7 @@ if uploaded_file is not None:
                 use_container_width=True
             )
             
-            html_payload = generate_dual_interactive_html(source_map, pool_size)
+            html_payload = generate_dual_interactive_html(df=source_map, target_pool_max=pool_size)
             down_col3.download_button(
                 label="3. Download Campaign Browser Map (.html)",
                 data=html_payload,
