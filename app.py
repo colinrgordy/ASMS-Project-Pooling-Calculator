@@ -529,7 +529,7 @@ if uploaded_file is not None:
             dash_col4.metric("DMSO Back-Flush Actions", backflush_wells_count)
             
             # Collapsible Quality Control Audit Log
-            with st.expander("🔍 Click to view structural omissions and data anomalies"):
+            with st.expander("Click to view structural omissions and data anomalies"):
                 if not skipped_df.empty:
                     st.warning(f"Total entries filtered out from raw input file: {len(skipped_df)}")
                     st.dataframe(skipped_df, use_container_width=True)
