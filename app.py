@@ -93,7 +93,7 @@ def process_sdf(file_path):
 def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_conc):
     pooled_records = []
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
-    columns = range(1, 25)
+    columns = range(1, 24)
     well_coordinates = [f"{r}{c:02d}" for r in rows for c in columns]
     
     current_plate = 1
@@ -212,6 +212,16 @@ def generate_dual_interactive_html(df, target_pool_max):
         h1 { margin: 0; font-size: 22px; color: #1e293b; }
         select, button { padding: 8px 16px; font-size: 14px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; font-weight: 500; }
         button.active-btn { background-color: #2563eb; color: white; border-color: #2563eb; }
+        
+        /* Unified Arrow/Select Navigation Housing */
+        .wrapper-nav { display: flex; align-items: center; gap: 0px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0px; overflow: hidden; }
+        .wrapper-nav select { border: none; border-radius: 0; padding: 8px 12px; background: transparent; outline: none; }
+        .wrapper-nav select:focus { box-shadow: none; }
+        .btn-arrow { border: none; background: transparent; padding: 8px 12px; font-size: 11px; color: #64748b; transition: all 0.1s ease; border-radius: 0; }
+        .btn-arrow:hover { background-color: #f1f5f9; color: #1e293b; }
+        .btn-arrow:first-child { border-right: 1px solid #e2e8f0; }
+        .btn-arrow:last-child { border-left: 1px solid #e2e8f0; }
+        
         .main-container { display: flex; gap: 24px; align-items: flex-start; }
         .plate-box { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
         .map-legend { display: flex; gap: 24px; margin-bottom: 20px; font-size: 13px; font-weight: 600; justify-content: center; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; flex-wrap: wrap; }
@@ -255,7 +265,13 @@ def generate_dual_interactive_html(df, target_pool_max):
         <div class="controls">
             <button id="btn384" class="active-btn" onclick="setViewType('source')">384-Well Source Plates</button>
             <button id="btn96" onclick="setViewType('assay')">96-Well Assay Plates</button>
-            <select id="plateSelect" onchange="renderPlate()"></select>
+            
+            <!-- Upgraded Seamless Paging Layout Block -->
+            <div class="wrapper-nav">
+                <button class="btn-arrow" onclick="pagePlates(-1)" title="Previous Plate">◀</button>
+                <select id="plateSelect" onchange="renderPlate()"></select>
+                <button class="btn-arrow" onclick="pagePlates(1)" title="Next Plate">▶</button>
+            </div>
         </div>
     </div>
 
@@ -295,6 +311,15 @@ def generate_dual_interactive_html(df, target_pool_max):
             
             renderLegend();
             renderPlate();
+        }
+
+        function pagePlates(direction) {
+            const select = document.getElementById('plateSelect');
+            const proposedIndex = select.selectedIndex + direction;
+            if (proposedIndex >= 0 && proposedIndex < select.options.length) {
+                select.selectedIndex = proposedIndex;
+                renderPlate();
+            }
         }
 
         function renderLegend() {
@@ -446,7 +471,7 @@ if uploaded_file is not None:
             source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
             source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
             
-            # Formulate the descriptive validation tracking columns for the 96-well asset sheet
+            # Formulate the descriptive tracking columns for the 96-well asset sheet
             source_map['Designated_Pool_Size'] = pool_size
             source_map['Actual_Pool_Size'] = source_map['Compounds_In_Pool']
             source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"⚠️ INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
@@ -496,7 +521,7 @@ if uploaded_file is not None:
                 use_container_width=True
             )
             
-            # File 2: Assay Destination Execution Layout (with explicit pool size warnings)
+            # File 2: Assay Destination Execution Layout
             asy_excel_cols = [
                 'Assay_Plate_96', 'Assay_Well_96', 'Pool_Status', 'Designated_Pool_Size', 'Actual_Pool_Size', 
                 'Source_Plate_384', 'Source_Well_384', 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 
