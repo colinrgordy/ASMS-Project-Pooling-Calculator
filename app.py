@@ -491,14 +491,15 @@ if uploaded_file is not None:
             assay_coordinates = [f"{r}{c:02d}" for r in assay_rows for c in assay_cols]
             
             coordinate_mapping_index = {}
-            for idx, row in unique_source_wells.iterrows():
+            for idx, row_wells in unique_source_wells.iterrows():
                 plate_idx = (idx // 96) + 1
                 well_idx = idx % 96
                 assigned_96_well = assay_coordinates[well_idx]
-                coordinate_mapping_index[(row['Source_Plate_384'], row['Source_Well_384'])] = (f"{plate_prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
-                
-            source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], row['Source_Well_384'])][0], axis=1)
-            source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], row['Source_Well_384'])][1], axis=1)
+                coordinate_mapping_index[(row_wells['Source_Plate_384'], row_wells['Source_Well_384'])] = (f"{plate_prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
+            
+            # 🛠️ FIXED: Scope variables updated to 'r' keys to prevent layout duplication glitches
+            source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
+            source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
             
             source_map['Designated_Pool_Size'] = pool_size
             source_map['Actual_Pool_Size'] = source_map['Compounds_In_Pool']
@@ -512,7 +513,6 @@ if uploaded_file is not None:
             
             st.success("HTS Screening manifests successfully generated!")
             
-            # Pure, independent Streamlit data column layout split side-by-side
             dash_col1, dash_col2, dash_col3, dash_col4 = st.columns(4)
             dash_col1.metric("Total Library Compounds", len(raw_df))
             dash_col2.metric("384-Well Source Pools (Out 1)", total_384_wells)
