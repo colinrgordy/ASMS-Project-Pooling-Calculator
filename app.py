@@ -30,20 +30,28 @@ st.sidebar.subheader("3. Echo Assay Calculator")
 dest_well_vol = st.sidebar.number_input("Assay Plate: Total Well Volume (µL)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
 desired_conc = st.sidebar.number_input("Assay Plate: Target Concentration (µM)", min_value=0.1, max_value=100.0, value=10.0, step=1.0)
 
-# Main File Upload Area
+# ==========================================
+# 2. Strategic Campaign Assets Input Area
+# ==========================================
+# 🛠️ FIXED: Shifted prefix naming setup above the file uploader to establish hierarchy
+plate_prefix = st.text_input(
+    "Required: Plate Name Prefix", 
+    value="", 
+    placeholder="Ex: ASMS_NPC, ASMS_MGL, ASMS_MIPE, etc.",
+    help="A unique identifier is strictly required to label data tracking tables and prevent accidental workbook file naming overlaps."
+)
+
 st.markdown("### Upload Core Campaign Assets")
 up_col1, up_col2 = st.columns(2)
 
 with up_col1:
     uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
-    plate_prefix = st.text_input("Plate Name Prefix", value="ASMS")
 
 with up_col2:
-    # 🧪 NEW: Secondary, completely optional uploader for compound management inventories
     uploaded_inventory = st.file_uploader("Optional Upstream Link: Upload 1536 Master Plate Maps", type=["csv", "xlsx"], help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file.")
 
 # ==========================================
-# 2. Computational Core Functions
+# 3. Computational Core Functions
 # ==========================================
 def process_sdf(file_path):
     supplier = Chem.SDMolSupplier(file_path)
@@ -474,9 +482,14 @@ def generate_dual_interactive_html(df, target_pool_max):
     return html_template.replace("{js_data_payload}", full_payload)
 
 # ==========================================
-# 3. Main System Pipeline Processing
+# 4. Main System Pipeline Processing
 # ==========================================
 if uploaded_file is not None:
+    # 🛠️ FIXED: Added hard validation gate stop to block execution if the required naming field is missing
+    if not plate_prefix.strip():
+        st.error("⚠️ **Missing Required Field:** You must enter a unique Plate Name Prefix above before running calculations to prevent campaign asset file name overlaps.")
+        st.stop()
+
     max_possible_compound_vol_nl = pool_size * vol_per_comp
     target_source_vol_nl = target_source_vol_ul * 1000.0
     
@@ -558,17 +571,15 @@ if uploaded_file is not None:
                 st.info(f"✅ Mass Resolution Checked: All pooling mixtures maintain structural Δm/z separation limits above {min_mz_threshold} Da.")
                 
             # ==========================================
-            # 4. Multi-Deliverable Export Hub
+            # 5. Multi-Deliverable Export Hub
             # ==========================================
             st.markdown("### Download Campaign Assets")
             
-            # Dynamically adjusts layout grid columns depending on whether inventory maps are active
             if uploaded_inventory is not None:
                 down_col0, down_col1, down_col2, down_col3, down_col4 = st.columns(5)
             else:
                 down_col1, down_col2, down_col3, down_col4 = st.columns(4)
             
-            # 🧪 NEW: Upstream 1536 -> 384 Echo consolidation processing pipeline
             if uploaded_inventory is not None:
                 try:
                     if uploaded_inventory.name.endswith('.csv'):
@@ -576,10 +587,8 @@ if uploaded_file is not None:
                     else:
                         inv_df = pd.read_excel(uploaded_inventory)
                     
-                    # Cleans string headers for cross-reference matching
                     inv_df.columns = [str(c).strip() for c in inv_df.columns]
                     
-                    # ⚠️ Placeholder matching keys: Assumes 'NCGC_ID', 'Plate_1536', 'Well_1536' column topology
                     expected_id_col = next((c for c in inv_df.columns if c.upper() in ['NCGC_ID', 'SAMPLE_ID', 'ID', 'COMPOUND_ID']), None)
                     expected_plt_col = next((c for c in inv_df.columns if 'PLATE' in c.upper() or 'BARCODE' in c.upper()), None)
                     expected_wel_col = next((c for c in inv_df.columns if 'WELL' in c.upper() or 'COORD' in c.upper()), None)
@@ -599,7 +608,6 @@ if uploaded_file is not None:
                                 'Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume'
                             ]
                             
-                            # Removes duplicates to create flat transfer matrix commands
                             picklist_1536_to_384 = picklist_1536_to_384.drop_duplicates().reset_index(drop=True)
                             
                             buf_up = io.StringIO()
