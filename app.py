@@ -8,11 +8,10 @@ import io
 import math
 import json
 
-st.set_page_config(page_title="ASMS Pooling Engine", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="AS-MS Pooling Engine", page_icon="🧪", layout="wide")
 
 st.title("NCATS ASMS Compound Pooling Engine")
 st.markdown("Created by Colin Gordy for use in the development of a semi-automated, small-molecule binders discovery assay utilizing HRMS. This tool automates multi-stage HTS workflows: Compiles 1536-well library entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates. Using .SDF files containing NCGC IDs and SMILES, the tool returns three output files: (1) A .xlsx Echo script for creating an acoustic 384-well source plate with the 1536-well CoMa library plates, (2) A .xlsx Echo script for using the 384-well acoustic source plate and standard, 96-well KingFisher Flex plates as the destination, (3) A .HTML file for an interactive visualization of both plate maps. Parameters can be customized using the side toolbar.")
-
 # ==========================================
 # 1. Sidebar Control Panel
 # ==========================================
@@ -136,13 +135,9 @@ def assign_wells_advanced(df, target_size, prefix, vol_comp, target_source_vol_u
     well_pointer = 0
     clean_prefix = prefix.strip().rstrip('_')
     
-    # Target source total volume converted securely to nanoliters
     target_source_vol_nl = target_source_vol_ul * 1000.0
-    
-    # C_source = C_stock * (Vol_individual_compound / Total_Source_Well_Volume)
     source_well_conc_uM = lib_stock_uM * (vol_comp / target_source_vol_nl)
     
-    # Echo Transfer Vol (nL) = (C_assay * V_assay_nL) / C_source
     assay_vol_nl = assay_vol * 1000.0
     echo_transfer_volume_nl = (assay_conc * assay_vol_nl) / source_well_conc_uM
     
@@ -169,8 +164,6 @@ def assign_wells_advanced(df, target_size, prefix, vol_comp, target_source_vol_u
             well_pointer += 1
             
             actual_pool_count = len(pool)
-            
-            # 🛠️ FIXED: DMSO backflush now dynamically accounts for the total forced plate volume threshold
             total_compound_fluid_nl = actual_pool_count * vol_comp
             dmso_backflush_nl = target_source_vol_nl - total_compound_fluid_nl
             
@@ -477,6 +470,14 @@ def generate_dual_interactive_html(df, target_pool_max):
 # 3. Main System Pipeline Processing
 # ==========================================
 if uploaded_file is not None:
+    # 🛠️ FIXED: Added a physical guardrail validator before executing calculations
+    max_possible_compound_vol_nl = pool_size * vol_per_comp
+    target_source_vol_nl = target_source_vol_ul * 1000.0
+    
+    if max_possible_compound_vol_nl > target_source_vol_nl:
+        st.error(f"❌ **Physical Fluidic Paradox Error:** You have requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires a minimum fluid volume of **{max_possible_compound_vol_nl / 1000.0} µL** per well from the library compound aliquots alone, which physically overflows your target Echo source well capacity of **{target_source_vol_ul} µL**. The liquid handler cannot execute negative DMSO back-flushes. Please reduce the compounds per well, lower the individual aliquot volume, or expand the target source well volume configuration.")
+        st.stop()
+
     with st.spinner("Executing double-stage library calculations..."):
         
         local_tmp_path = "temp_upload_data.sdf"
@@ -487,7 +488,6 @@ if uploaded_file is not None:
         if os.path.exists(local_tmp_path): os.remove(local_tmp_path)
         
         if not raw_df.empty:
-            # Stock conversion mM -> µM
             lib_stock_uM = lib_stock_conc * 1000.0
             
             source_map = assign_wells_advanced(
@@ -528,6 +528,7 @@ if uploaded_file is not None:
             total_96_wells = len(source_map[['Assay_Plate_96', 'Assay_Well_96']].drop_duplicates())
             plates_needed = math.ceil(total_96_wells / 96)
             
+            # 🛠️ FIXED: Counts absolute physical backflush requirements rather than unpopulated counts
             backflush_wells_count = source_map[source_map['DMSO_Backflush_Volume_nL'] > 0]['Source_Well_384'].nunique()
             
             st.success("HTS Screening manifests successfully generated!")
