@@ -67,20 +67,21 @@ def process_sdf(file_path):
             if '-' in str(sample_id):
                 sample_id = str(sample_id).split('-')[0]
         
-        # 2. Trap Salt Fragments / Multi-Component Mixtures
+        # 🛠️ FIXED: Automatically STRIP salt fragments instead of deleting the compound
+        working_mol = mol
         if len(Chem.GetMolFrags(mol)) > 1:
-            omissions.append({
-                'SDF_Record_Index': idx + 1,
-                'NCGC_ID': sample_id,
-                'Omission_Reason': "Salt Fragment / Multi-Component Mixture Detected"
-            })
-            continue
+            try:
+                frags = Chem.GetMolFrags(mol, asMols=True)
+                # Keep only the largest organic fragment (the parent drug molecule)
+                working_mol = max(frags, key=lambda m: m.GetNumAtoms())
+            except:
+                pass
             
         try:
-            exact_mass = Descriptors.ExactMolWt(mol)
-            smiles = Chem.MolToSmiles(mol)
+            exact_mass = Descriptors.ExactMolWt(working_mol)
+            smiles = Chem.MolToSmiles(working_mol)
             
-            # 3. Trap Zero-Mass Empty Records
+            # 2. Trap Zero-Mass Empty Records
             if exact_mass == 0:
                 omissions.append({
                     'SDF_Record_Index': idx + 1,
@@ -89,7 +90,7 @@ def process_sdf(file_path):
                 })
                 continue
             
-            # 4. Trap Missing Structural Data
+            # 3. Trap Missing Structural Data
             if not smiles or smiles.strip() == "":
                 omissions.append({
                     'SDF_Record_Index': idx + 1,
@@ -98,8 +99,8 @@ def process_sdf(file_path):
                 })
                 continue
                 
-            has_base = mol.HasSubstructMatch(basic_nitrogen)
-            has_acid = mol.HasSubstructMatch(acidic_group)
+            has_base = working_mol.HasSubstructMatch(basic_nitrogen)
+            has_acid = working_mol.HasSubstructMatch(acidic_group)
             
             if has_base and not has_acid:
                 predicted_mode = "positive"
@@ -131,7 +132,7 @@ def process_sdf(file_path):
 def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_conc):
     pooled_records = []
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
-    columns = range(1, 25)
+    columns = range(1, 24)
     well_coordinates = [f"{r}{c:02d}" for r in rows for c in columns]
     
     current_plate = 1
