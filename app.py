@@ -22,8 +22,10 @@ st.sidebar.subheader("1. Library Pooling Options")
 pool_size = st.sidebar.number_input("Target Compounds per Well", min_value=2, max_value=50, value=10, step=1)
 min_mz_threshold = st.sidebar.number_input("Minimum Allowed Δm/z Threshold (Da)", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
 
-st.sidebar.subheader("2. Volumetric Normalization")
-vol_per_comp = st.sidebar.number_input("Source Plate: Vol per Compound (nL)", min_value=10, max_value=2000, value=100, step=50)
+st.sidebar.subheader("2. Volumetric Normalization & Physics")
+lib_stock_conc = st.sidebar.number_input("1536 Library Stock Concentration (mM)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
+vol_per_comp = st.sidebar.number_input("Source Plate: Aliquot Vol per Compound (nL)", min_value=10, max_value=5000, value=1000, step=100, help="Volume of each compound pipetted from the 1536 plate into the 384 source well.")
+target_source_vol_ul = st.sidebar.number_input("Source Plate: Target Total Well Volume (µL)", min_value=2.0, max_value=50.0, value=10.0, step=1.0, help="The desired final working volume inside the 384 Echo source well (typically 8-10 µL).")
 
 st.sidebar.subheader("3. Echo Assay Calculator")
 dest_well_vol = st.sidebar.number_input("Assay Plate: Total Well Volume (µL)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
@@ -124,7 +126,7 @@ def process_sdf(file_path):
             
     return pd.DataFrame(data), pd.DataFrame(omissions)
 
-def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_conc):
+def assign_wells_advanced(df, target_size, prefix, vol_comp, target_source_vol_ul, lib_stock_uM, assay_vol, assay_conc):
     pooled_records = []
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
     columns = range(1, 25) 
@@ -134,7 +136,15 @@ def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_co
     well_pointer = 0
     clean_prefix = prefix.strip().rstrip('_')
     
-    echo_transfer_nl = (assay_conc * assay_vol) / 10.0
+    # Target source total volume converted securely to nanoliters
+    target_source_vol_nl = target_source_vol_ul * 1000.0
+    
+    # C_source = C_stock * (Vol_individual_compound / Total_Source_Well_Volume)
+    source_well_conc_uM = lib_stock_uM * (vol_comp / target_source_vol_nl)
+    
+    # Echo Transfer Vol (nL) = (C_assay * V_assay_nL) / C_source
+    assay_vol_nl = assay_vol * 1000.0
+    echo_transfer_volume_nl = (assay_conc * assay_vol_nl) / source_well_conc_uM
     
     for mode, group in df.groupby('Predicted_Mode'):
         sorted_group = group.sort_values(by='Target_m_z').reset_index(drop=True)
@@ -159,8 +169,10 @@ def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_co
             well_pointer += 1
             
             actual_pool_count = len(pool)
-            dmso_backflush_nl = (target_size - actual_pool_count) * vol_comp
-            total_well_fluid_volume_nl = target_size * vol_comp
+            
+            # 🛠️ FIXED: DMSO backflush now dynamically accounts for the total forced plate volume threshold
+            total_compound_fluid_nl = actual_pool_count * vol_comp
+            dmso_backflush_nl = target_source_vol_nl - total_compound_fluid_nl
             
             pool_mzs = sorted([comp['Target_m_z'] for comp in pool])
             if len(pool_mzs) > 1:
@@ -179,11 +191,11 @@ def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_co
                     'Exact_Mass': round(comp['Exact_Mass'], 4),
                     'Target_m_z': round(comp['Target_m_z'], 4),
                     'Min_Δm/z_In_Well': round(min_delta_observed, 4) if min_delta_observed != float('inf') else 0.0,
-                    'DMSO_Backflush_Volume_nL': dmso_backflush_nl,
-                    'Total_Well_Fluid_Vol_nL': total_well_fluid_volume_nl,
+                    'DMSO_Backflush_Volume_nL': max(0.0, dmso_backflush_nl),
+                    'Total_Well_Fluid_Vol_nL': target_source_vol_nl,
                     'Assay_Total_Volume_µL': assay_vol,
                     'Assay_Target_Conc_µM': assay_conc,
-                    'Echo_Transfer_Volume_nL': echo_transfer_nl,
+                    'Echo_Transfer_Volume_nL': round(echo_transfer_volume_nl, 2),
                     'Ionization_Mode': comp['Predicted_Mode'],
                     'SMILES': comp['SMILES']
                 })
@@ -475,11 +487,16 @@ if uploaded_file is not None:
         if os.path.exists(local_tmp_path): os.remove(local_tmp_path)
         
         if not raw_df.empty:
+            # Stock conversion mM -> µM
+            lib_stock_uM = lib_stock_conc * 1000.0
+            
             source_map = assign_wells_advanced(
                 raw_df, 
                 target_size=pool_size, 
                 prefix=plate_prefix, 
                 vol_comp=vol_per_comp,
+                target_source_vol_ul=target_source_vol_ul,
+                lib_stock_uM=lib_stock_uM,
                 assay_vol=dest_well_vol,
                 assay_conc=desired_conc
             )
@@ -497,7 +514,6 @@ if uploaded_file is not None:
                 assigned_96_well = assay_coordinates[well_idx]
                 coordinate_mapping_index[(r_wells['Source_Plate_384'], r_wells['Source_Well_384'])] = (f"{plate_prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
             
-            # Secure scope variables verified across all lambda lookups
             source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
             source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
             
@@ -509,7 +525,6 @@ if uploaded_file is not None:
             
             total_384_wells = len(source_map['Source_Well_384'].unique())
             
-            # Option B Analytics: Computes the precise ceiling count for the required final microplates
             total_96_wells = len(source_map[['Assay_Plate_96', 'Assay_Well_96']].drop_duplicates())
             plates_needed = math.ceil(total_96_wells / 96)
             
