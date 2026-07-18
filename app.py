@@ -11,7 +11,7 @@ import json
 st.set_page_config(page_title="AS-MS Pooling Engine", page_icon="🧪", layout="wide")
 
 st.title("NCATS ASMS Advanced Pooling Engine")
-st.markdown("Created by Colin Gordy for use in the development of a semi-automated ASMS, small-molecular binders assay platform. This tool automates multi-stage HTS workflows: Compiles 1536-well library entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates.")
+st.markdown("Created by Colin Gordy for use in the development of a semi-automated, small-molecular binders discovery assay utilizing HRMS. This tool automates multi-stage HTS workflows: Compiles 1536-well library entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates.")
 
 # ==========================================
 # 1. Sidebar Control Panel
