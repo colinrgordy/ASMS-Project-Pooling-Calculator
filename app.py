@@ -294,7 +294,7 @@ def generate_interactive_html(df):
                     <div class="compound-id">\${{c.id}}</div>
                     <div><strong>Exact Mass:</strong> \${{c.mass.toFixed(4)}} Da</div>
                     <div><strong>Target M/Z:</strong> \${{c.mz.toFixed(4)}}</div>
-                    <div style="margin-top:5px; color:#64748b; font-size:11px; word-break:break-all;"><strong>SMILES:</strong> \text{\${{c.smiles}}}</div>
+                    <div style="margin-top:5px; color:#64748b; font-size:11px; word-break:break-all;"><strong>SMILES:</strong> \${{c.smiles}}</div>
                 `;
                 let imgDiv = document.createElement('div'); imgDiv.className = 'struct-img';
                 if(c.img) imgDiv.innerHTML = c.img;
@@ -333,7 +333,7 @@ if uploaded_file is not None:
             )
             
             # Sort securely
-            final_map = final_map.sort_values(by=['Destination_Plate', 'Ionization_Mode', 'Target_m_z']).reset_index(drop=True)
+            final_map = final_map.sort_values(by=['Destination_Plate', 'Destination_Well', 'Well_Sub_Index']).reset_index(drop=True)
             html_raw_data = final_map.copy()
             
             # Analytical validation checks
