@@ -46,7 +46,6 @@ def process_sdf(file_path):
     acidic_group = Chem.MolFromSmarts("[C,S](=[O,S])[O;H1,-1]")
     
     for idx, mol in enumerate(supplier):
-        # 1. Trap Corrupted / Dead Records
         if mol is None:
             omissions.append({
                 'SDF_Record_Index': idx + 1,
@@ -67,12 +66,10 @@ def process_sdf(file_path):
             if '-' in str(sample_id):
                 sample_id = str(sample_id).split('-')[0]
         
-        # 🛠️ FIXED: Automatically STRIP salt fragments instead of deleting the compound
         working_mol = mol
         if len(Chem.GetMolFrags(mol)) > 1:
             try:
                 frags = Chem.GetMolFrags(mol, asMols=True)
-                # Keep only the largest organic fragment (the parent drug molecule)
                 working_mol = max(frags, key=lambda m: m.GetNumAtoms())
             except:
                 pass
@@ -81,7 +78,6 @@ def process_sdf(file_path):
             exact_mass = Descriptors.ExactMolWt(working_mol)
             smiles = Chem.MolToSmiles(working_mol)
             
-            # 2. Trap Zero-Mass Empty Records
             if exact_mass == 0:
                 omissions.append({
                     'SDF_Record_Index': idx + 1,
@@ -90,7 +86,6 @@ def process_sdf(file_path):
                 })
                 continue
             
-            # 3. Trap Missing Structural Data
             if not smiles or smiles.strip() == "":
                 omissions.append({
                     'SDF_Record_Index': idx + 1,
@@ -132,7 +127,7 @@ def process_sdf(file_path):
 def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_conc):
     pooled_records = []
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
-    columns = range(1, 24)
+    columns = range(1, 25) # FIXED: Changed from 24 to 25 to include column 24
     well_coordinates = [f"{r}{c:02d}" for r in rows for c in columns]
     
     current_plate = 1
@@ -476,12 +471,10 @@ if uploaded_file is not None:
         with open(local_tmp_path, "wb") as f:
             f.write(uploaded_file.getvalue())
             
-        # Capture both arrays out of processing loop
         raw_df, skipped_df = process_sdf(local_tmp_path)
         if os.path.exists(local_tmp_path): os.remove(local_tmp_path)
         
         if not raw_df.empty:
-            # Step A: Map 1536-well properties down into 384-well source plate configurations
             source_map = assign_wells_advanced(
                 raw_df, 
                 target_size=pool_size, 
@@ -491,7 +484,6 @@ if uploaded_file is not None:
                 assay_conc=desired_conc
             )
             
-            # Step B: Graph 384-well source positions directly across 96-well destination grids
             unique_source_wells = source_map[['Source_Plate_384', 'Source_Well_384']].drop_duplicates().reset_index(drop=True)
             
             assay_rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -508,15 +500,12 @@ if uploaded_file is not None:
             source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
             source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
             
-            # Descriptive tracking columns for the 96-well asset sheet
             source_map['Designated_Pool_Size'] = pool_size
             source_map['Actual_Pool_Size'] = source_map['Compounds_In_Pool']
             source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"⚠️ INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
             
-            # Sort cleanly for logical lab tracking
             source_map = source_map.sort_values(by=['Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index']).reset_index(drop=True)
             
-            # Compute operational pipeline dashboards
             total_384_wells = len(source_map['Source_Well_384'].unique())
             total_96_wells = len(source_map['Assay_Well_96'].unique())
             backflush_wells_count = source_map[source_map['Compounds_In_Pool'] < pool_size]['Source_Well_384'].nunique()
@@ -525,18 +514,16 @@ if uploaded_file is not None:
             dash_col1, dash_col2, dash_col3, dash_col4 = st.columns(4)
             dash_col1.metric("Total Library Compounds", len(raw_df))
             dash_col2.metric("384-Well Source Pools (Out 1)", total_384_wells)
-            dash_col3.metric("96-Well Assay Locations (Out 2)", total_96_wells)
+            dash_col2.metric("96-Well Assay Locations (Out 2)", total_96_wells)
             dash_col4.metric("DMSO Back-Flush Actions", backflush_wells_count)
             
-            # Collapsible Quality Control Audit Log
-            with st.expander("Click to view structural omissions and data anomalies"):
+            with st.expander("🔍 Click to view structural omissions and data anomalies"):
                 if not skipped_df.empty:
                     st.warning(f"Total entries filtered out from raw input file: {len(skipped_df)}")
                     st.dataframe(skipped_df, use_container_width=True)
                 else:
                     st.info("Pristine Library File: 0 structural exclusions or parsing failures recorded.")
             
-            # Check for mass violations
             violating_pools = source_map[source_map['Min_Δm/z_In_Well'] < min_mz_threshold]['Source_Well_384'].nunique()
             if violating_pools > 0:
                 st.warning(f"⚠️ Mass Resolution Alert: {violating_pools} well pools contain compounds falling below your preferred {min_mz_threshold} Da Δm/z resolution limit.")
@@ -549,7 +536,6 @@ if uploaded_file is not None:
             st.markdown("### Download Campaign Assets")
             down_col1, down_col2, down_col3 = st.columns(3)
             
-            # File 1: Source Plate Creation Layout
             src_excel_cols = [
                 'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
                 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL'
@@ -566,7 +552,6 @@ if uploaded_file is not None:
                 use_container_width=True
             )
             
-            # File 2: Assay Destination Execution Layout
             asy_excel_cols = [
                 'Assay_Plate_96', 'Assay_Well_96', 'Pool_Status', 'Designated_Pool_Size', 'Actual_Pool_Size', 
                 'Source_Plate_384', 'Source_Well_384', 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 
@@ -584,7 +569,6 @@ if uploaded_file is not None:
                 use_container_width=True
             )
             
-            # File 3: Interactive HTML Visual Layout Map
             html_payload = generate_dual_interactive_html(source_map, pool_size)
             down_col3.download_button(
                 label="3. Download Campaign Browser Map (.html)",
@@ -594,7 +578,6 @@ if uploaded_file is not None:
                 use_container_width=True
             )
             
-            # Local Dashboard Layout Preview
             st.markdown("### Unified Data Matrix Preview")
             st.dataframe(source_map[[
                 'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Backflush_Required',
