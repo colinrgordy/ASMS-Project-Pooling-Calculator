@@ -470,7 +470,6 @@ def generate_dual_interactive_html(df, target_pool_max):
 # 3. Main System Pipeline Processing
 # ==========================================
 if uploaded_file is not None:
-    # 🛠️ FIXED: Added a physical guardrail validator before executing calculations
     max_possible_compound_vol_nl = pool_size * vol_per_comp
     target_source_vol_nl = target_source_vol_ul * 1000.0
     
@@ -528,7 +527,6 @@ if uploaded_file is not None:
             total_96_wells = len(source_map[['Assay_Plate_96', 'Assay_Well_96']].drop_duplicates())
             plates_needed = math.ceil(total_96_wells / 96)
             
-            # 🛠️ FIXED: Counts absolute physical backflush requirements rather than unpopulated counts
             backflush_wells_count = source_map[source_map['DMSO_Backflush_Volume_nL'] > 0]['Source_Well_384'].nunique()
             
             st.success("HTS Screening manifests successfully generated!")
@@ -556,7 +554,9 @@ if uploaded_file is not None:
             # 4. Multi-Deliverable Export Hub
             # ==========================================
             st.markdown("### Download Campaign Assets")
-            down_col1, down_col2, down_col3 = st.columns(3)
+            
+            # 🛠️ FIXED: Expanded export layout from 3 to 4 distinct tracking columns
+            down_col1, down_col2, down_col3, down_col4 = st.columns(4)
             
             src_excel_cols = [
                 'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
@@ -584,7 +584,7 @@ if uploaded_file is not None:
                 source_map[asy_excel_cols].to_excel(writer, sheet_name="96_Assay_Run", index=False)
             buf_asy.seek(0)
             down_col2.download_button(
-                label="2. Download Assay Run Workbook (.xlsx)",
+                label="2. Download Assay Run Manifest (.xlsx)",
                 data=buf_asy,
                 file_name=f"{plate_prefix.strip().lower()}_assay_run_manifest.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -597,6 +597,27 @@ if uploaded_file is not None:
                 data=html_payload,
                 file_name=f"{plate_prefix.strip().lower()}_campaign_map.html",
                 mime="text/html",
+                use_container_width=True
+            )
+            
+            # 🛠️ FIXED: Compiles a native, duplicate-collapsed automation picklist format for direct Echo upload
+            echo_picklist_df = source_map[[
+                'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Echo_Transfer_Volume_nL'
+            ]].drop_duplicates().reset_index(drop=True)
+            
+            echo_picklist_df.columns = [
+                'Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume'
+            ]
+            
+            buf_pick = io.StringIO()
+            echo_picklist_df.to_csv(buf_pick, index=False)
+            csv_pick = buf_pick.getvalue()
+            
+            down_col4.download_button(
+                label="4. Download Echo Run Picklist (.csv)",
+                data=csv_pick,
+                file_name=f"{plate_prefix.strip().lower()}_echo_assay_picklist.csv",
+                mime="text/csv",
                 use_container_width=True
             )
             
