@@ -30,10 +30,17 @@ st.sidebar.subheader("3. Echo Assay Calculator")
 dest_well_vol = st.sidebar.number_input("Assay Plate: Total Well Volume (µL)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
 desired_conc = st.sidebar.number_input("Assay Plate: Target Concentration (µM)", min_value=0.1, max_value=100.0, value=10.0, step=1.0)
 
-# File Uploader
-st.markdown("### Upload Library File")
-uploaded_file = st.file_uploader("Choose an SDF file", type=["sdf"])
-plate_prefix = st.text_input("Plate Name Prefix", value="ASMS")
+# Main File Upload Area
+st.markdown("### Upload Core Campaign Assets")
+up_col1, up_col2 = st.columns(2)
+
+with up_col1:
+    uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
+    plate_prefix = st.text_input("Plate Name Prefix", value="ASMS")
+
+with up_col2:
+    # 🧪 NEW: Secondary, completely optional uploader for compound management inventories
+    uploaded_inventory = st.file_uploader("Optional Upstream Link: Upload 1536 Master Plate Maps", type=["csv", "xlsx"], help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file.")
 
 # ==========================================
 # 2. Computational Core Functions
@@ -555,9 +562,64 @@ if uploaded_file is not None:
             # ==========================================
             st.markdown("### Download Campaign Assets")
             
-            # 🛠️ FIXED: Expanded export layout from 3 to 4 distinct tracking columns
-            down_col1, down_col2, down_col3, down_col4 = st.columns(4)
+            # Dynamically adjusts layout grid columns depending on whether inventory maps are active
+            if uploaded_inventory is not None:
+                down_col0, down_col1, down_col2, down_col3, down_col4 = st.columns(5)
+            else:
+                down_col1, down_col2, down_col3, down_col4 = st.columns(4)
             
+            # 🧪 NEW: Upstream 1536 -> 384 Echo consolidation processing pipeline
+            if uploaded_inventory is not None:
+                try:
+                    if uploaded_inventory.name.endswith('.csv'):
+                        inv_df = pd.read_csv(uploaded_inventory)
+                    else:
+                        inv_df = pd.read_excel(uploaded_inventory)
+                    
+                    # Cleans string headers for cross-reference matching
+                    inv_df.columns = [str(c).strip() for c in inv_df.columns]
+                    
+                    # ⚠️ Placeholder matching keys: Assumes 'NCGC_ID', 'Plate_1536', 'Well_1536' column topology
+                    expected_id_col = next((c for c in inv_df.columns if c.upper() in ['NCGC_ID', 'SAMPLE_ID', 'ID', 'COMPOUND_ID']), None)
+                    expected_plt_col = next((c for c in inv_df.columns if 'PLATE' in c.upper() or 'BARCODE' in c.upper()), None)
+                    expected_wel_col = next((c for c in inv_df.columns if 'WELL' in c.upper() or 'COORD' in c.upper()), None)
+                    
+                    if expected_id_col and expected_plt_col and expected_wel_col:
+                        inv_df['match_id'] = inv_df[expected_id_col].astype(str).str.strip()
+                        source_map['match_id'] = source_map['NCGC_ID'].astype(str).str.strip()
+                        
+                        consolidation_df = pd.merge(source_map, inv_df, on='match_id', how='inner')
+                        
+                        if not consolidation_df.empty:
+                            picklist_1536_to_384 = consolidation_df[[
+                                expected_plt_col, expected_wel_col, 'Source_Plate_384', 'Source_Well_384'
+                            ]].copy()
+                            picklist_1536_to_384['Transfer Volume'] = vol_per_comp
+                            picklist_1536_to_384.columns = [
+                                'Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume'
+                            ]
+                            
+                            # Removes duplicates to create flat transfer matrix commands
+                            picklist_1536_to_384 = picklist_1536_to_384.drop_duplicates().reset_index(drop=True)
+                            
+                            buf_up = io.StringIO()
+                            picklist_1536_to_384.to_csv(buf_up, index=False)
+                            csv_up = buf_up.getvalue()
+                            
+                            down_col0.download_button(
+                                label="0. Download 1536 ➔ 384 Picklist (.csv)",
+                                data=csv_up,
+                                file_name=f"{plate_prefix.strip().lower()}_1536_to_384_consolidation.csv",
+                                mime="text/csv",
+                                use_container_width=True
+                            )
+                        else:
+                            down_col0.error("0 Match IDs identified between files.")
+                    else:
+                        down_col0.error("Missing mapping column keys.")
+                except Exception as ex:
+                    down_col0.error(f"Upstream pipeline error: {str(ex)}")
+
             src_excel_cols = [
                 'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
                 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL'
@@ -600,7 +662,6 @@ if uploaded_file is not None:
                 use_container_width=True
             )
             
-            # 🛠️ FIXED: Compiles a native, duplicate-collapsed automation picklist format for direct Echo upload
             echo_picklist_df = source_map[[
                 'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Echo_Transfer_Volume_nL'
             ]].drop_duplicates().reset_index(drop=True)
