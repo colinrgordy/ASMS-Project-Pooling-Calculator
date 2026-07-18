@@ -40,12 +40,20 @@ plate_prefix = st.text_input("Plate Name Prefix", value="ASMS")
 def process_sdf(file_path):
     supplier = Chem.SDMolSupplier(file_path)
     data = []
+    omissions = []
     
     basic_nitrogen = Chem.MolFromSmarts("[NX3;H2,H1,H0;!$(NC=O);!$(N-[#6a])]")
     acidic_group = Chem.MolFromSmarts("[C,S](=[O,S])[O;H1,-1]")
     
     for idx, mol in enumerate(supplier):
-        if mol is None: continue
+        # 1. Trap Corrupted / Dead Records
+        if mol is None:
+            omissions.append({
+                'SDF_Record_Index': idx + 1,
+                'NCGC_ID': "UNPARSEABLE_RECORD",
+                'Omission_Reason': "Corrupted / Dead SDF Record Block"
+            })
+            continue
         
         sample_id = None
         for prop_name in ['SAMPLE_ID', 'Name', 'ID', 'sample_id', 'id']:
@@ -54,16 +62,40 @@ def process_sdf(file_path):
                 break
         
         if not sample_id: 
-            sample_id = f"UNKNOWN_{idx}"
+            sample_id = f"UNKNOWN_ID_REC_{idx + 1}"
         else:
             if '-' in str(sample_id):
                 sample_id = str(sample_id).split('-')[0]
+        
+        # 2. Trap Salt Fragments / Multi-Component Mixtures
+        if len(Chem.GetMolFrags(mol)) > 1:
+            omissions.append({
+                'SDF_Record_Index': idx + 1,
+                'NCGC_ID': sample_id,
+                'Omission_Reason': "Salt Fragment / Multi-Component Mixture Detected"
+            })
+            continue
             
         try:
             exact_mass = Descriptors.ExactMolWt(mol)
             smiles = Chem.MolToSmiles(mol)
             
-            if exact_mass == 0 or not smiles or smiles.strip() == "":
+            # 3. Trap Zero-Mass Empty Records
+            if exact_mass == 0:
+                omissions.append({
+                    'SDF_Record_Index': idx + 1,
+                    'NCGC_ID': sample_id,
+                    'Omission_Reason': "Empty Record (Zero Molecular Weight)"
+                })
+                continue
+            
+            # 4. Trap Missing Structural Data
+            if not smiles or smiles.strip() == "":
+                omissions.append({
+                    'SDF_Record_Index': idx + 1,
+                    'NCGC_ID': sample_id,
+                    'Omission_Reason': "Missing Structural SMILES Data String"
+                })
                 continue
                 
             has_base = mol.HasSubstructMatch(basic_nitrogen)
@@ -86,14 +118,20 @@ def process_sdf(file_path):
                 'Predicted_Mode': predicted_mode,
                 'SMILES': smiles
             })
-        except:
+        except Exception as e:
+            omissions.append({
+                'SDF_Record_Index': idx + 1,
+                'NCGC_ID': sample_id,
+                'Omission_Reason': f"Unexpected Processing Exception: {str(e)}"
+            })
             continue
-    return pd.DataFrame(data)
+            
+    return pd.DataFrame(data), pd.DataFrame(omissions)
 
 def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_conc):
     pooled_records = []
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
-    columns = range(1, 24)
+    columns = range(1, 25)
     well_coordinates = [f"{r}{c:02d}" for r in rows for c in columns]
     
     current_plate = 1
@@ -213,10 +251,8 @@ def generate_dual_interactive_html(df, target_pool_max):
         select, button { padding: 8px 16px; font-size: 14px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; font-weight: 500; }
         button.active-btn { background-color: #2563eb; color: white; border-color: #2563eb; }
         
-        /* Unified Arrow/Select Navigation Housing */
         .wrapper-nav { display: flex; align-items: center; gap: 0px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0px; overflow: hidden; }
         .wrapper-nav select { border: none; border-radius: 0; padding: 8px 12px; background: transparent; outline: none; }
-        .wrapper-nav select:focus { box-shadow: none; }
         .btn-arrow { border: none; background: transparent; padding: 8px 12px; font-size: 11px; color: #64748b; transition: all 0.1s ease; border-radius: 0; }
         .btn-arrow:hover { background-color: #f1f5f9; color: #1e293b; }
         .btn-arrow:first-child { border-right: 1px solid #e2e8f0; }
@@ -266,7 +302,6 @@ def generate_dual_interactive_html(df, target_pool_max):
             <button id="btn384" class="active-btn" onclick="setViewType('source')">384-Well Source Plates</button>
             <button id="btn96" onclick="setViewType('assay')">96-Well Assay Plates</button>
             
-            <!-- Upgraded Seamless Paging Layout Block -->
             <div class="wrapper-nav">
                 <button class="btn-arrow" onclick="pagePlates(-1)" title="Previous Plate">◀</button>
                 <select id="plateSelect" onchange="renderPlate()"></select>
@@ -440,7 +475,8 @@ if uploaded_file is not None:
         with open(local_tmp_path, "wb") as f:
             f.write(uploaded_file.getvalue())
             
-        raw_df = process_sdf(local_tmp_path)
+        # Capture both arrays out of processing loop
+        raw_df, skipped_df = process_sdf(local_tmp_path)
         if os.path.exists(local_tmp_path): os.remove(local_tmp_path)
         
         if not raw_df.empty:
@@ -471,7 +507,7 @@ if uploaded_file is not None:
             source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
             source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
             
-            # Formulate the descriptive tracking columns for the 96-well asset sheet
+            # Descriptive tracking columns for the 96-well asset sheet
             source_map['Designated_Pool_Size'] = pool_size
             source_map['Actual_Pool_Size'] = source_map['Compounds_In_Pool']
             source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"⚠️ INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
@@ -490,6 +526,14 @@ if uploaded_file is not None:
             dash_col2.metric("384-Well Source Pools (Out 1)", total_384_wells)
             dash_col3.metric("96-Well Assay Locations (Out 2)", total_96_wells)
             dash_col4.metric("DMSO Back-Flush Actions", backflush_wells_count)
+            
+            # Collapsible Quality Control Audit Log
+            with st.expander("🔍 Click to view structural omissions and data anomalies"):
+                if not skipped_df.empty:
+                    st.warning(f"Total entries filtered out from raw input file: {len(skipped_df)}")
+                    st.dataframe(skipped_df, use_container_width=True)
+                else:
+                    st.info("Pristine Library File: 0 structural exclusions or parsing failures recorded.")
             
             # Check for mass violations
             violating_pools = source_map[source_map['Min_Δm/z_In_Well'] < min_mz_threshold]['Source_Well_384'].nunique()
