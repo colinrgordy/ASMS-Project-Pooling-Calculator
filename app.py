@@ -19,7 +19,7 @@ st.sidebar.header("Configuration Panel")
 
 st.sidebar.subheader("1. Library Pooling Options")
 pool_size = st.sidebar.number_input("Target Compounds per Well", min_value=2, max_value=50, value=10, step=1)
-min_mz_threshold = st.sidebar.number_input("Minimum Allowed m/z Delta (Da)", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
+min_mz_threshold = st.sidebar.number_input("Minimum Allowed Δm/z Threshold (Da)", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
 
 st.sidebar.subheader("2. Volumetric Normalization")
 vol_per_comp = st.sidebar.number_input("Source Plate: Vol per Compound (nL)", min_value=10, max_value=2000, value=100, step=50, help="The nanoliter volume of each individual compound added to create a pooled source well.")
@@ -147,9 +147,10 @@ def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_co
                     'NCGC_ID': comp['SAMPLE_ID'],
                     'Exact_Mass': round(comp['Exact_Mass'], 4),
                     'Target_m_z': round(comp['Target_m_z'], 4),
-                    'Min_m_z_Delta_In_Well': round(min_delta_observed, 4) if min_delta_observed != float('inf') else 0.0,
+                    'Min_Δm/z_In_Well': round(min_delta_observed, 4) if min_delta_observed != float('inf') else 0.0,
                     'DMSO_Backflush_Volume_nL': dmso_backflush_nl,
                     'Total_Well_Fluid_Vol_nL': total_well_fluid_volume_nl,
+                    'Assay_Target_Conc_µM': assay_conc,
                     'Echo_Transfer_To_Destination_nL': echo_transfer_nl,
                     'Ionization_Mode': comp['Predicted_Mode'],
                     'SMILES': comp['SMILES']
@@ -359,7 +360,7 @@ if uploaded_file is not None:
             wells_with_remainder = final_map[final_map['Compounds_In_Pool'] < pool_size]['Destination_Well'].nunique()
             complete_wells = total_wells_created - wells_with_remainder
             
-            violating_wells_df = final_map[final_map['Min_m_z_Delta_In_Well'] < min_mz_threshold]
+            violating_wells_df = final_map[final_map['Min_Δm/z_In_Well'] < min_mz_threshold]
             num_violations = violating_wells_df['Destination_Well'].nunique()
             
             # System Metrics Dashboard
@@ -410,8 +411,8 @@ if uploaded_file is not None:
             st.dataframe(
                 final_map[[
                     'Destination_Plate', 'Destination_Well', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
-                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_m_z_Delta_In_Well', 
-                    'DMSO_Backflush_Volume_nL', 'Echo_Transfer_To_Destination_nL', 'Ionization_Mode'
+                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 
+                    'DMSO_Backflush_Volume_nL', 'Assay_Target_Conc_µM', 'Echo_Transfer_To_Destination_nL', 'Ionization_Mode'
                 ]], use_container_width=True
             )
         else:
