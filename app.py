@@ -487,7 +487,7 @@ def generate_dual_interactive_html(df, target_pool_max):
 if uploaded_file is not None:
     # 🛠️ FIXED: Added hard validation gate stop to block execution if the required naming field is missing
     if not plate_prefix.strip():
-        st.error("⚠️ **Missing Required Field:** You must enter a unique Plate Name Prefix above before running calculations to prevent campaign asset file name overlaps.")
+        st.error("⚠️ **Missing Required Field:** You must enter a unique Plate Name Prefix above before running calculations in order to help prevent asset file name overlaps.")
         st.stop()
 
     max_possible_compound_vol_nl = pool_size * vol_per_comp
