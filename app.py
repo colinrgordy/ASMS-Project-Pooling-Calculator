@@ -528,7 +528,7 @@ if uploaded_file is not None:
             total_96_wells = len(source_map[['Assay_Plate_96', 'Assay_Well_96']].drop_duplicates())
             plates_needed = math.ceil(total_96_wells / 96)
             
-            backflush_wells_count = source_map[source_map['Compounds_In_Pool'] < pool_size]['Source_Well_384'].nunique()
+            backflush_wells_count = source_map[source_map['DMSO_Backflush_Volume_nL'] > 0]['Source_Well_384'].nunique()
             
             st.success("HTS Screening manifests successfully generated!")
             
