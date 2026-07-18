@@ -127,7 +127,7 @@ def process_sdf(file_path):
 def assign_wells_advanced(df, target_size, prefix, vol_comp, assay_vol, assay_conc):
     pooled_records = []
     rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
-    columns = range(1, 25) # FIXED: Changed from 24 to 25 to include column 24
+    columns = range(1, 25) # 🛠️ FIXED: Securely captures 1 through 24 inclusive now
     well_coordinates = [f"{r}{c:02d}" for r in rows for c in columns]
     
     current_plate = 1
@@ -511,10 +511,12 @@ if uploaded_file is not None:
             backflush_wells_count = source_map[source_map['Compounds_In_Pool'] < pool_size]['Source_Well_384'].nunique()
             
             st.success("HTS Screening manifests successfully generated!")
+            
+            # 🛠️ FIXED: Re-mapped metric channels back side-by-side onto four distinct columns cleanly
             dash_col1, dash_col2, dash_col3, dash_col4 = st.columns(4)
             dash_col1.metric("Total Library Compounds", len(raw_df))
             dash_col2.metric("384-Well Source Pools (Out 1)", total_384_wells)
-            dash_col2.metric("96-Well Assay Locations (Out 2)", total_96_wells)
+            dash_col3.metric("96-Well Assay Locations (Out 2)", total_96_wells)
             dash_col4.metric("DMSO Back-Flush Actions", backflush_wells_count)
             
             with st.expander("🔍 Click to view structural omissions and data anomalies"):
