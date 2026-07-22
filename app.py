@@ -713,7 +713,7 @@ with tab1:
                 st.error("SDF parsing returned an empty data array. Check property tagging fields.")
 
 # ==========================================
-# TAB 2: PLATE MAP UNPIVOTER
+# TAB 2: PLATE MAP UNPIVOTER (CORRECTED)
 # ==========================================
 with tab2:
     st.subheader("🧪 Visual Plate Map Unpivoter")
@@ -724,28 +724,34 @@ with tab2:
     if uploaded_map_file is not None:
         try:
             xls_file = pd.ExcelFile(uploaded_map_file)
-            col_offset = st.number_input("Data Start Column Index (Excel Column F = 5)", value=5, min_value=0)
 
             all_records = []
             for sheet_name in xls_file.sheet_names:
                 df_map = pd.read_excel(xls_file, sheet_name=sheet_name, header=None)
                 for r_idx in range(df_map.shape[0]):
                     row_label = str(df_map.iloc[r_idx, 0]).strip()
-                    if not row_label or row_label.lower() == 'nan': continue
-                    for c_idx in range(col_offset, df_map.shape[1]):
+                    if not row_label or row_label.lower() == 'nan': 
+                        continue
+                    
+                    # 🛠️ FIXED: c_idx = 1 is 1536 Col 01 (Excel B), c_idx = 5 is 1536 Col 05 (Excel F)
+                    for c_idx in range(1, df_map.shape[1]):
                         val = df_map.iloc[r_idx, c_idx]
                         if pd.notna(val) and str(val).strip().lower() != 'nan':
-                            well_id = f"{row_label}{(c_idx - (col_offset - 1)):02d}"
-                            all_records.append({"NCGC_ID": str(val).strip(), "Plate_1536": sheet_name, "Well_1536": well_id})
+                            well_id = f"{row_label}{c_idx:02d}"  # Directly maps c_idx 5 -> 'A05'
+                            all_records.append({
+                                "NCGC_ID": str(val).strip(), 
+                                "Plate_1536": sheet_name, 
+                                "Well_1536": well_id
+                            })
             
             flat_df = pd.DataFrame(all_records)
             
-            st.metric("Total Linearized Wells", len(flat_df))
+            st.metric("Total Linearized Wells Extracted", len(flat_df))
             st.dataframe(flat_df.head(20), use_container_width=True)
             
             buf = io.StringIO()
             flat_df.to_csv(buf, index=False)
-            st.download_button("⬇️ Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
+            st.download_button("⬇️ Download Corrected Linearized CSV Map", buf.getvalue(), "1536_master_map_flat_corrected.csv", "text/csv", type="primary")
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
