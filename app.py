@@ -62,7 +62,7 @@ with tab1:
         st.info("💡 **Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first!")
         uploaded_inventory = st.file_uploader(
             "Optional: Upload 1536 Master Plate Maps", 
-            type=["csv", "xlsx"], 
+            type=["csv", "xlsx", "xls"], 
             help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file."
         )
 
@@ -474,7 +474,6 @@ with tab1:
             
             compounds.forEach(c => {
                 let card = document.createElement('div'); card.className = 'compound-card';
-                let info = document.className = 'compound-info';
                 card.innerHTML = `
                     <div style="flex:1;">
                         <div style="font-size:15px; font-weight:bold; color:#2563eb; margin-bottom:4px;">${c.id}</div>
@@ -581,7 +580,6 @@ with tab1:
                 # ==========================================
                 st.markdown("### Download Campaign Assets")
                 
-                # Check for uploaded 1536 Master Map to generate Picklist #0
                 if uploaded_inventory is not None:
                     try:
                         if uploaded_inventory.name.endswith('.csv'):
@@ -596,7 +594,6 @@ with tab1:
                         expected_wel_col = next((c for c in inv_df.columns if 'WELL' in c.upper() or 'COORD' in c.upper()), None)
                         
                         if expected_id_col and expected_plt_col and expected_wel_col:
-                            # 🛠️ FIXED: Normalize match_id on BOTH sides (strip batch suffix e.g., 'NCGC00015716-09' -> 'NCGC00015716')
                             inv_df['match_id'] = inv_df[expected_id_col].astype(str).str.strip().apply(lambda x: x.split('-')[0])
                             source_map['match_id'] = source_map['NCGC_ID'].astype(str).str.strip().apply(lambda x: x.split('-')[0])
                             
@@ -613,7 +610,7 @@ with tab1:
                                 
                                 picklist_1536_to_384 = picklist_1536_to_384.drop_duplicates().reset_index(drop=True)
                                 
-                                # 🛠️ SORT BY SOURCE PLATE FIRST TO ELIMINATE PLATE SWAPS
+                                # SORT BY SOURCE PLATE FIRST TO ELIMINATE PLATE SWAPS
                                 picklist_1536_to_384 = picklist_1536_to_384.sort_values(
                                     by=['Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well']
                                 ).reset_index(drop=True)
@@ -730,19 +727,14 @@ with tab2:
                 df_map = pd.read_excel(xls_file, sheet_name=sheet_name, header=None)
                 for r_idx in range(df_map.shape[0]):
                     row_label = str(df_map.iloc[r_idx, 0]).strip()
-                    if not row_label or row_label.lower() == 'nan': 
-                        continue
+                    if not row_label or row_label.lower() == 'nan': continue
                     
-                    # 🛠️ FIXED: c_idx = 1 is 1536 Col 01 (Excel B), c_idx = 5 is 1536 Col 05 (Excel F)
+                    # c_idx = 1 maps to 1536 Col 01 (Excel B), c_idx = 5 maps to 1536 Col 05 (Excel F)
                     for c_idx in range(1, df_map.shape[1]):
                         val = df_map.iloc[r_idx, c_idx]
                         if pd.notna(val) and str(val).strip().lower() != 'nan':
-                            well_id = f"{row_label}{c_idx:02d}"  # Directly maps c_idx 5 -> 'A05'
-                            all_records.append({
-                                "NCGC_ID": str(val).strip(), 
-                                "Plate_1536": sheet_name, 
-                                "Well_1536": well_id
-                            })
+                            well_id = f"{row_label}{c_idx:02d}"
+                            all_records.append({"NCGC_ID": str(val).strip(), "Plate_1536": sheet_name, "Well_1536": well_id})
             
             flat_df = pd.DataFrame(all_records)
             
@@ -751,12 +743,12 @@ with tab2:
             
             buf = io.StringIO()
             flat_df.to_csv(buf, index=False)
-            st.download_button("⬇️ Download Corrected Linearized CSV Map", buf.getvalue(), "1536_master_map_flat_corrected.csv", "text/csv", type="primary")
+            st.download_button("⬇️ Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
 # ==========================================
-# TAB 3: ECHO SURVEY VOLUME PRE-FILTER
+# TAB 3: ECHO SURVEY VOLUME PRE-FILTER (CORRECTED & ENHANCED)
 # ==========================================
 with tab3:
     st.subheader("📊 Echo Survey Volume Pre-Filter")
@@ -764,15 +756,20 @@ with tab3:
 
     col_s1, col_s2 = st.columns(2)
     with col_s1:
-        s_map = st.file_uploader("1. Upload Linearized 1536 Master Map (.csv)", type=["csv"], key="s_map_up")
+        # Accepts CSV, XLSX, and XLS files
+        s_map = st.file_uploader("1. Upload Linearized 1536 Master Map (.csv, .xlsx, .xls)", type=["csv", "xlsx", "xls"], key="s_map_up")
     with col_s2:
-        s_survey = st.file_uploader("2. Upload Echo Survey Spreadsheet (.xlsx)", type=["xlsx", "xls"], key="s_surv_up")
+        s_survey = st.file_uploader("2. Upload Echo Survey Spreadsheet (.xlsx, .xls)", type=["xlsx", "xls"], key="s_surv_up")
 
     vol_cutoff = st.number_input("Minimum Dispense Volume Cutoff (µL)", min_value=0.5, max_value=5.0, value=1.5, step=0.1)
 
     if s_map is not None and s_survey is not None:
         try:
-            map_df = pd.read_csv(s_map)
+            if s_map.name.endswith('.csv'):
+                map_df = pd.read_csv(s_map)
+            else:
+                map_df = pd.read_excel(s_map)
+
             df_survey_raw = pd.read_excel(s_survey, header=None)
             
             row_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE','AF']
@@ -780,7 +777,7 @@ with tab3:
             blocks = []
             cur_b = []
             for r in range(len(df_survey_raw)):
-                if len(df_survey_raw.iloc[r, 5:].dropna()) > 0: cur_b.append(r)
+                if len(df_survey_raw.iloc[r, 1:].dropna()) > 0: cur_b.append(r)
                 else:
                     if cur_b: blocks.append(cur_b); cur_b = []
             if cur_b: blocks.append(cur_b)
@@ -792,12 +789,13 @@ with tab3:
                 plt_name = unique_map_plates[p_idx] if p_idx < len(unique_map_plates) else f"Plate_{p_idx+1}"
                 for r_i, r_idx in enumerate(b):
                     row_let = row_letters[r_i]
-                    for col_idx in range(5, df_survey_raw.shape[1]):
+                    # c_idx = 1 maps directly to 1536 Col 01 (Excel B), c_idx = 5 maps to Col 05 (Excel F)
+                    for col_idx in range(1, df_survey_raw.shape[1]):
                         v_val = df_survey_raw.iloc[r_idx, col_idx]
                         if pd.notna(v_val):
                             survey_recs.append({
                                 'Plate_1536': plt_name,
-                                'Well_1536': f"{row_let}{(col_idx-4):02d}",
+                                'Well_1536': f"{row_let}{col_idx:02d}",
                                 'Measured_Volume_uL': float(v_val)
                             })
 
