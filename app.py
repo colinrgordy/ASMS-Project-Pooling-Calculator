@@ -32,7 +32,6 @@ desired_conc = st.sidebar.number_input("Assay Plate: Target Concentration (µM)"
 # ==========================================
 # 2. Strategic Campaign Assets Input Area
 # ==========================================
-# 🛠️ FIXED: Shifted prefix naming setup above the file uploader to establish hierarchy
 plate_prefix = st.text_input(
     "Required: Plate Name Prefix", 
     value="", 
@@ -47,9 +46,20 @@ with up_col1:
     uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
 
 with up_col2:
-    uploaded_inventory = st.file_uploader("Optional: Upload 1536 Master Plate Maps", type=["csv", "xlsx"], help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file.")
+    # 💡 MAP CONVERTER CALLOUT ADDED HERE
+    st.info(
+        "💡 **Need to convert a visual Excel plate map?** "
+        "If your 1536 map is formatted as a 2D visual grid (A–AF rows), "
+        "use our [Plate Map Unpivoter](https://your-converter-app.streamlit.app) "
+        "to generate a clean CSV manifest first!"
+    )
+    uploaded_inventory = st.file_uploader(
+        "Optional: Upload 1536 Master Plate Maps", 
+        type=["csv", "xlsx"], 
+        help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file."
+    )
 
-# ==========================================
+# # ==========================================
 # 3. Computational Core Functions
 # ==========================================
 def process_sdf(file_path):
