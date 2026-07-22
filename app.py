@@ -26,9 +26,8 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.markdown(
         "Created by Colin Gordy for use in the development of a semi-automated, small-molecule "
-        "binders discovery assay utilizing HRMS. This tool helps with HTS workflows: Compiles library "
-        "entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps "
-        "subsequent nanoliter transfers to 96-well assay target plates."
+        "binders discovery assay utilizing HRMS. Compiles library entries into consolidated 384-well acoustic "
+        "source pools, tracks volume normalization, and maps nanoliter transfers to 96-well target plates."
     )
 
     st.sidebar.header("Configuration Panel")
@@ -475,16 +474,19 @@ with tab1:
             
             compounds.forEach(c => {
                 let card = document.createElement('div'); card.className = 'compound-card';
-                let info = document.createElement('div'); info.className = 'compound-info';
-                info.innerHTML = `
-                    <div class="compound-id">${c.id}</div>
-                    <div><strong>Exact Mass:</strong> ${c.mass.toFixed(4)} Da</div>
-                    <div><strong>Target M/Z:</strong> ${c.mz.toFixed(4)}</div>
-                    <div style="margin-top:5px; color:#64748b; font-size:11px; word-break:break-all;"><strong>SMILES:</strong> ${c.smiles}</div>
+                let info = document.className = 'compound-info';
+                card.innerHTML = `
+                    <div style="flex:1;">
+                        <div style="font-size:15px; font-weight:bold; color:#2563eb; margin-bottom:4px;">${c.id}</div>
+                        <div><strong>Exact Mass:</strong> ${c.mass.toFixed(4)} Da</div>
+                        <div><strong>Target M/Z:</strong> ${c.mz.toFixed(4)}</div>
+                        <div style="margin-top:5px; color:#64748b; font-size:11px; word-break:break-all;"><strong>SMILES:</strong> ${c.smiles}</div>
+                    </div>
+                    <div style="width:130px; height:130px; background:white; border:1px solid #e2e8f0; border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                        ${c.img ? c.img : ''}
+                    </div>
                 `;
-                let imgDiv = document.createElement('div'); imgDiv.className = 'struct-img';
-                if(c.img) imgDiv.innerHTML = c.img;
-                card.appendChild(info); card.appendChild(imgDiv); listContainer.appendChild(card);
+                listContainer.appendChild(card);
             });
         }
 
@@ -495,7 +497,7 @@ with tab1:
 """
         return html_template.replace("{js_data_payload}", full_payload)
 
-    # Pipeline Execution
+    # Main Pipeline Execution
     if uploaded_file is not None:
         if not plate_prefix.strip():
             st.error("⚠️ **Missing Required Field:** Enter a unique Plate Name Prefix above before running calculations.")
@@ -531,7 +533,6 @@ with tab1:
                 )
                 
                 unique_source_wells = source_map[['Source_Plate_384', 'Source_Well_384']].drop_duplicates().reset_index(drop=True)
-                
                 assay_rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
                 assay_cols = range(1, 13)
                 assay_coordinates = [f"{r}{c:02d}" for r in assay_rows for c in assay_cols]
@@ -539,17 +540,14 @@ with tab1:
                 coordinate_mapping_index = {}
                 for idx, r_wells in unique_source_wells.iterrows():
                     plate_idx = (idx // 96) + 1
-                    well_idx = idx % 96
-                    assigned_96_well = assay_coordinates[well_idx]
+                    assigned_96_well = assay_coordinates[idx % 96]
                     coordinate_mapping_index[(r_wells['Source_Plate_384'], r_wells['Source_Well_384'])] = (f"{plate_prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
                 
                 source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
                 source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
-                
                 source_map['Designated_Pool_Size'] = pool_size
                 source_map['Actual_Pool_Size'] = source_map['Compounds_In_Pool']
                 source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"⚠️ INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
-                
                 source_map = source_map.sort_values(by=['Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index']).reset_index(drop=True)
                 
                 total_384_wells = len(source_map['Source_Well_384'].unique())
@@ -583,11 +581,7 @@ with tab1:
                 # ==========================================
                 st.markdown("### Download Campaign Assets")
                 
-                if uploaded_inventory is not None:
-                    down_col0, down_col1, down_col2, down_col3, down_col4 = st.columns(5)
-                else:
-                    down_col1, down_col2, down_col3, down_col4 = st.columns(4)
-                
+                # Check for uploaded 1536 Master Map to generate Picklist #0
                 if uploaded_inventory is not None:
                     try:
                         if uploaded_inventory.name.endswith('.csv'):
@@ -602,8 +596,9 @@ with tab1:
                         expected_wel_col = next((c for c in inv_df.columns if 'WELL' in c.upper() or 'COORD' in c.upper()), None)
                         
                         if expected_id_col and expected_plt_col and expected_wel_col:
-                            inv_df['match_id'] = inv_df[expected_id_col].astype(str).str.strip()
-                            source_map['match_id'] = source_map['NCGC_ID'].astype(str).str.strip()
+                            # 🛠️ FIXED: Normalize match_id on BOTH sides (strip batch suffix e.g., 'NCGC00015716-09' -> 'NCGC00015716')
+                            inv_df['match_id'] = inv_df[expected_id_col].astype(str).str.strip().apply(lambda x: x.split('-')[0])
+                            source_map['match_id'] = source_map['NCGC_ID'].astype(str).str.strip().apply(lambda x: x.split('-')[0])
                             
                             consolidation_df = pd.merge(source_map, inv_df, on='match_id', how='inner')
                             
@@ -622,19 +617,23 @@ with tab1:
                                 picklist_1536_to_384.to_csv(buf_up, index=False)
                                 csv_up = buf_up.getvalue()
                                 
-                                down_col0.download_button(
-                                    label="0. Download 1536 ➔ 384 Picklist (.csv)",
+                                st.success(f"✅ **1536 ➔ 384 Consolidation Picklist Generated!** Matched {len(consolidation_df)} compound locations.")
+                                st.download_button(
+                                    label="0. Download 1536 ➔ 384 Consolidation Picklist (.csv)",
                                     data=csv_up,
                                     file_name=f"{plate_prefix.strip().lower()}_1536_to_384_consolidation.csv",
                                     mime="text/csv",
-                                    use_container_width=True
+                                    type="primary",
+                                    use_container_width=False
                                 )
                             else:
-                                down_col0.error("0 Match IDs identified between files.")
+                                st.error("⚠️ **0 Match IDs Identified:** Make sure your 1536 Master Map contains an 'NCGC_ID' column matching the SDF.")
                         else:
-                            down_col0.error("Missing mapping column keys.")
+                            st.error(f"⚠️ **Missing Required Mapping Columns:** Need 'NCGC_ID', 'Plate_1536', and 'Well_1536' in Master Map. Found columns: {list(inv_df.columns)}")
                     except Exception as ex:
-                        down_col0.error(f"Upstream pipeline error: {str(ex)}")
+                        st.error(f"Upstream pipeline error: {str(ex)}")
+
+                down_col1, down_col2, down_col3, down_col4 = st.columns(4)
 
                 src_excel_cols = [
                     'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
