@@ -58,7 +58,7 @@ with tab1:
         uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
 
     with up_col2:
-        st.info("💡 **Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first!")
+        st.info("**Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first!")
         uploaded_inventory = st.file_uploader(
             "Optional: Upload 1536 Master Plate Maps", 
             type=["csv", "xlsx"], 
