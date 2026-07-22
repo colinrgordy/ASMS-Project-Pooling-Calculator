@@ -13,7 +13,7 @@ st.set_page_config(page_title="ASMS Pooling Engine", page_icon="⚜", layout="wi
 st.title("NCATS ASMS Compound Pooling Suite")
 
 # Create tabs at the top of the main page
-tab1, tab2 = st.tabs(["⚜ Main Pooling Engine", "🧪 2D Plate Map Unpivoter"])
+tab1, tab2 = st.tabs(["⚜ Main Pooling Engine", "2D Plate Map Unpivoter"])
 
 # ==========================================
 # TAB 1: MAIN POOLING ENGINE
@@ -57,7 +57,7 @@ with tab1:
         uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
 
     with up_col2:
-        st.info("💡 **Have a 2D visual Excel plate map?** Switch to the **🧪 2D Plate Map Unpivoter** tab above to convert it into a flat CSV manifest first!")
+        st.info("**Have a 2D visual Excel plate map?** Switch to the **2D Plate Map Unpivoter** tab above to convert it into a linearized CSV manifest first")
         uploaded_inventory = st.file_uploader(
             "Optional: Upload 1536 Master Plate Maps", 
             type=["csv", "xlsx"], 
