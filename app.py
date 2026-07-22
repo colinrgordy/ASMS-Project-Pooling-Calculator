@@ -10,266 +10,263 @@ import json
 
 st.set_page_config(page_title="ASMS Pooling Engine", page_icon="⚜", layout="wide")
 
-st.title("NCATS ASMS Compound Pooling Engine")
-st.markdown("Created by Colin Gordy for use in the development of a semi-automated, small-molecule binders discovery assay utilizing HRMS. This tool helps with HTS workflows: Compiles library entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates. Using .SDF files containing NCGC IDs and SMILES, the tool returns four outputs: (1) An .xlsx file for creating an acoustic 384-well source plate with the 1536-well CoMa library plates, (2) An .xlsx file for using the 384-well acoustic source plate and standard, 96-well KingFisher Flex plates as the destination, (3) A .HTML file for an interactive visualization of both plate maps, (4) a CSV picklist file for the Echo to use the generated 384-well source plate for dispensing into the 96-well destination plate. Parameters can be customized using the side toolbar.")
+st.title("NCATS ASMS Compound Pooling Suite")
+
+# Create tabs at the top of the main page
+tab1, tab2 = st.tabs(["⚜ Main Pooling Engine", "🧪 2D Plate Map Unpivoter"])
 
 # ==========================================
-# 1. Sidebar Control Panel
+# TAB 1: MAIN POOLING ENGINE
 # ==========================================
-st.sidebar.header("Configuration Panel")
-
-st.sidebar.subheader("1. Library Pooling Options")
-pool_size = st.sidebar.number_input("Target Compounds per Well", min_value=2, max_value=50, value=10, step=1)
-min_mz_threshold = st.sidebar.number_input("Minimum Allowed Δm/z Threshold (Da)", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
-
-st.sidebar.subheader("2. Volumetric Normalization & Physics")
-lib_stock_conc = st.sidebar.number_input("1536 Library Stock Concentration (mM)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
-vol_per_comp = st.sidebar.number_input("Source Plate: Aliquot Vol per Compound (nL)", min_value=10, max_value=5000, value=1000, step=100, help="Volume of each compound pipetted from the 1536 plate into the 384 source well.")
-target_source_vol_ul = st.sidebar.number_input("Source Plate: Target Total Well Volume (µL)", min_value=2.0, max_value=50.0, value=10.0, step=1.0, help="The desired final working volume inside the 384 Echo source well (typically 8-10 µL).")
-
-st.sidebar.subheader("3. Echo Assay Calculator")
-dest_well_vol = st.sidebar.number_input("Assay Plate: Total Well Volume (µL)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
-desired_conc = st.sidebar.number_input("Assay Plate: Target Concentration (µM)", min_value=0.1, max_value=100.0, value=10.0, step=1.0)
-
-# ==========================================
-# 2. Strategic Campaign Assets Input Area
-# ==========================================
-plate_prefix = st.text_input(
-    "Required: Plate Name Prefix", 
-    value="", 
-    placeholder="Ex: ASMS_NPC, ASMS_MGL, ASMS_MIPE, etc.",
-    help="A unique identifier is strictly required to label data tracking tables and prevent accidental workbook file naming overlaps."
-)
-
-st.markdown("### Upload Core Campaign Assets")
-up_col1, up_col2 = st.columns(2)
-
-with up_col1:
-    uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
-
-with up_col2:
-    st.info(
-        "💡 **Need to convert a visual Excel plate map?** "
-        "If your 1536 map is formatted as a 2D visual grid (A–AF rows), "
-        "click **01 Map Converter** in the left sidebar menu to convert it first!"
-    )
-    
-    try:
-        st.page_link("pages/01_Map_Converter.py", label="Open Plate Map Unpivoter", icon="🧪")
-    except Exception:
-        pass
-    
-    uploaded_inventory = st.file_uploader(
-        "Optional: Upload 1536 Master Plate Maps", 
-        type=["csv", "xlsx"], 
-        help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file."
+with tab1:
+    st.markdown(
+        "Created by Colin Gordy for use in the development of a semi-automated, small-molecule "
+        "binders discovery assay utilizing HRMS. This tool helps with HTS workflows: Compiles library "
+        "entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps "
+        "subsequent nanoliter transfers to 96-well assay target plates."
     )
 
-# ==========================================
-# 3. Computational Core Functions
-# ==========================================
-def process_sdf(file_path):
-    supplier = Chem.SDMolSupplier(file_path)
-    data = []
-    omissions = []
-    
-    basic_nitrogen = Chem.MolFromSmarts("[NX3;H2,H1,H0;!$(NC=O);!$(N-[#6a])]")
-    acidic_group = Chem.MolFromSmarts("[C,S](=[O,S])[O;H1,-1]")
-    
-    for idx, mol in enumerate(supplier):
-        if mol is None:
-            omissions.append({
-                'SDF_Record_Index': idx + 1,
-                'NCGC_ID': "UNPARSEABLE_RECORD",
-                'Omission_Reason': "Corrupted / Dead SDF Record Block"
-            })
-            continue
+    # Sidebar Control Panel (Appears on Tab 1)
+    st.sidebar.header("Configuration Panel")
+
+    st.sidebar.subheader("1. Library Pooling Options")
+    pool_size = st.sidebar.number_input("Target Compounds per Well", min_value=2, max_value=50, value=10, step=1)
+    min_mz_threshold = st.sidebar.number_input("Minimum Allowed Δm/z Threshold (Da)", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
+
+    st.sidebar.subheader("2. Volumetric Normalization & Physics")
+    lib_stock_conc = st.sidebar.number_input("1536 Library Stock Concentration (mM)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
+    vol_per_comp = st.sidebar.number_input("Source Plate: Aliquot Vol per Compound (nL)", min_value=10, max_value=5000, value=1000, step=100, help="Volume of each compound pipetted from the 1536 plate into the 384 source well.")
+    target_source_vol_ul = st.sidebar.number_input("Source Plate: Target Total Well Volume (µL)", min_value=2.0, max_value=50.0, value=10.0, step=1.0, help="The desired final working volume inside the 384 Echo source well (typically 8-10 µL).")
+
+    st.sidebar.subheader("3. Echo Assay Calculator")
+    dest_well_vol = st.sidebar.number_input("Assay Plate: Total Well Volume (µL)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
+    desired_conc = st.sidebar.number_input("Assay Plate: Target Concentration (µM)", min_value=0.1, max_value=100.0, value=10.0, step=1.0)
+
+    # Input Area
+    plate_prefix = st.text_input(
+        "Required: Plate Name Prefix", 
+        value="", 
+        placeholder="Ex: ASMS_NPC, ASMS_MGL, ASMS_MIPE, etc.",
+        help="A unique identifier is strictly required to label data tracking tables and prevent accidental workbook file naming overlaps."
+    )
+
+    st.markdown("### Upload Core Campaign Assets")
+    up_col1, up_col2 = st.columns(2)
+
+    with up_col1:
+        uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
+
+    with up_col2:
+        st.info("💡 **Have a 2D visual Excel plate map?** Switch to the **🧪 2D Plate Map Unpivoter** tab above to convert it into a flat CSV manifest first!")
+        uploaded_inventory = st.file_uploader(
+            "Optional: Upload 1536 Master Plate Maps", 
+            type=["csv", "xlsx"], 
+            help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file."
+        )
+
+    # Core Functions
+    def process_sdf(file_path):
+        supplier = Chem.SDMolSupplier(file_path)
+        data = []
+        omissions = []
         
-        sample_id = None
-        for prop_name in ['SAMPLE_ID', 'Name', 'ID', 'sample_id', 'id']:
-            if mol.HasProp(prop_name):
-                sample_id = mol.GetProp(prop_name)
-                break
+        basic_nitrogen = Chem.MolFromSmarts("[NX3;H2,H1,H0;!$(NC=O);!$(N-[#6a])]")
+        acidic_group = Chem.MolFromSmarts("[C,S](=[O,S])[O;H1,-1]")
         
-        if not sample_id: 
-            sample_id = f"UNKNOWN_ID_REC_{idx + 1}"
-        else:
-            if '-' in str(sample_id):
-                sample_id = str(sample_id).split('-')[0]
-        
-        working_mol = mol
-        if len(Chem.GetMolFrags(mol)) > 1:
+        for idx, mol in enumerate(supplier):
+            if mol is None:
+                omissions.append({
+                    'SDF_Record_Index': idx + 1,
+                    'NCGC_ID': "UNPARSEABLE_RECORD",
+                    'Omission_Reason': "Corrupted / Dead SDF Record Block"
+                })
+                continue
+            
+            sample_id = None
+            for prop_name in ['SAMPLE_ID', 'Name', 'ID', 'sample_id', 'id']:
+                if mol.HasProp(prop_name):
+                    sample_id = mol.GetProp(prop_name)
+                    break
+            
+            if not sample_id: 
+                sample_id = f"UNKNOWN_ID_REC_{idx + 1}"
+            else:
+                if '-' in str(sample_id):
+                    sample_id = str(sample_id).split('-')[0]
+            
+            working_mol = mol
+            if len(Chem.GetMolFrags(mol)) > 1:
+                try:
+                    frags = Chem.GetMolFrags(mol, asMols=True)
+                    working_mol = max(frags, key=lambda m: m.GetNumAtoms())
+                except:
+                    pass
+                
             try:
-                frags = Chem.GetMolFrags(mol, asMols=True)
-                working_mol = max(frags, key=lambda m: m.GetNumAtoms())
-            except:
-                pass
-            
-        try:
-            exact_mass = Descriptors.ExactMolWt(working_mol)
-            smiles = Chem.MolToSmiles(working_mol)
-            
-            if exact_mass == 0:
+                exact_mass = Descriptors.ExactMolWt(working_mol)
+                smiles = Chem.MolToSmiles(working_mol)
+                
+                if exact_mass == 0:
+                    omissions.append({
+                        'SDF_Record_Index': idx + 1,
+                        'NCGC_ID': sample_id,
+                        'Omission_Reason': "Empty Record (Zero Molecular Weight)"
+                    })
+                    continue
+                
+                if not smiles or smiles.strip() == "":
+                    omissions.append({
+                        'SDF_Record_Index': idx + 1,
+                        'NCGC_ID': sample_id,
+                        'Omission_Reason': "Missing Structural SMILES Data String"
+                    })
+                    continue
+                    
+                has_base = working_mol.HasSubstructMatch(basic_nitrogen)
+                has_acid = working_mol.HasSubstructMatch(acidic_group)
+                
+                if has_base and not has_acid:
+                    predicted_mode = "positive"
+                    target_mz = exact_mass + 1.0073
+                elif has_acid and not has_base:
+                    predicted_mode = "negative"
+                    target_mz = exact_mass - 1.0073
+                else:
+                    predicted_mode = "positive"  
+                    target_mz = exact_mass + 1.0073
+                    
+                data.append({
+                    'SAMPLE_ID': sample_id,
+                    'Exact_Mass': exact_mass,
+                    'Target_m_z': target_mz,
+                    'Predicted_Mode': predicted_mode,
+                    'SMILES': smiles
+                })
+            except Exception as e:
                 omissions.append({
                     'SDF_Record_Index': idx + 1,
                     'NCGC_ID': sample_id,
-                    'Omission_Reason': "Empty Record (Zero Molecular Weight)"
-                })
-                continue
-            
-            if not smiles or smiles.strip() == "":
-                omissions.append({
-                    'SDF_Record_Index': idx + 1,
-                    'NCGC_ID': sample_id,
-                    'Omission_Reason': "Missing Structural SMILES Data String"
+                    'Omission_Reason': f"Unexpected Processing Exception: {str(e)}"
                 })
                 continue
                 
-            has_base = working_mol.HasSubstructMatch(basic_nitrogen)
-            has_acid = working_mol.HasSubstructMatch(acidic_group)
-            
-            if has_base and not has_acid:
-                predicted_mode = "positive"
-                target_mz = exact_mass + 1.0073
-            elif has_acid and not has_base:
-                predicted_mode = "negative"
-                target_mz = exact_mass - 1.0073
-            else:
-                predicted_mode = "positive"  
-                target_mz = exact_mass + 1.0073
-                
-            data.append({
-                'SAMPLE_ID': sample_id,
-                'Exact_Mass': exact_mass,
-                'Target_m_z': target_mz,
-                'Predicted_Mode': predicted_mode,
-                'SMILES': smiles
-            })
-        except Exception as e:
-            omissions.append({
-                'SDF_Record_Index': idx + 1,
-                'NCGC_ID': sample_id,
-                'Omission_Reason': f"Unexpected Processing Exception: {str(e)}"
-            })
-            continue
-            
-    return pd.DataFrame(data), pd.DataFrame(omissions)
+        return pd.DataFrame(data), pd.DataFrame(omissions)
 
-def assign_wells_advanced(df, target_size, prefix, vol_comp, target_source_vol_ul, lib_stock_uM, assay_vol, assay_conc):
-    pooled_records = []
-    rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
-    columns = range(1, 25) 
-    well_coordinates = [f"{r}{c:02d}" for r in rows for c in columns]
-    
-    current_plate = 1
-    well_pointer = 0
-    clean_prefix = prefix.strip().rstrip('_')
-    
-    target_source_vol_nl = target_source_vol_ul * 1000.0
-    source_well_conc_uM = lib_stock_uM * (vol_comp / target_source_vol_nl)
-    
-    assay_vol_nl = assay_vol * 1000.0
-    echo_transfer_volume_nl = (assay_conc * assay_vol_nl) / source_well_conc_uM
-    
-    for mode, group in df.groupby('Predicted_Mode'):
-        sorted_group = group.sort_values(by='Target_m_z').reset_index(drop=True)
-        num_compounds = len(sorted_group)
+    def assign_wells_advanced(df, target_size, prefix, vol_comp, target_source_vol_ul, lib_stock_uM, assay_vol, assay_conc):
+        pooled_records = []
+        rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']
+        columns = range(1, 25) 
+        well_coordinates = [f"{r}{c:02d}" for r in rows for c in columns]
         
-        if num_compounds == 0: continue
+        current_plate = 1
+        well_pointer = 0
+        clean_prefix = prefix.strip().rstrip('_')
         
-        num_pools = math.ceil(num_compounds / target_size)
-        stride_pools = [[] for _ in range(num_pools)]
+        target_source_vol_nl = target_source_vol_ul * 1000.0
+        source_well_conc_uM = lib_stock_uM * (vol_comp / target_source_vol_nl)
         
-        for idx, row in sorted_group.iterrows():
-            pool_idx = idx % num_pools
-            stride_pools[pool_idx].append(row)
+        assay_vol_nl = assay_vol * 1000.0
+        echo_transfer_volume_nl = (assay_conc * assay_vol_nl) / source_well_conc_uM
+        
+        for mode, group in df.groupby('Predicted_Mode'):
+            sorted_group = group.sort_values(by='Target_m_z').reset_index(drop=True)
+            num_compounds = len(sorted_group)
             
-        for pool in stride_pools:
-            if not pool: continue
-            if well_pointer >= len(well_coordinates):
-                well_pointer = 0
-                current_plate += 1
-                
-            assigned_well = well_coordinates[well_pointer]
-            well_pointer += 1
+            if num_compounds == 0: continue
             
-            actual_pool_count = len(pool)
-            total_compound_fluid_nl = actual_pool_count * vol_comp
-            dmso_backflush_nl = target_source_vol_nl - total_compound_fluid_nl
+            num_pools = math.ceil(num_compounds / target_size)
+            stride_pools = [[] for _ in range(num_pools)]
             
-            pool_mzs = sorted([comp['Target_m_z'] for comp in pool])
-            if len(pool_mzs) > 1:
-                min_delta_observed = min(pool_mzs[i+1] - pool_mzs[i] for i in range(len(pool_mzs)-1))
-            else:
-                min_delta_observed = float('inf')
+            for idx, row in sorted_group.iterrows():
+                pool_idx = idx % num_pools
+                stride_pools[pool_idx].append(row)
                 
-            for sub_idx, comp in enumerate(pool):
-                pooled_records.append({
-                    'Source_Plate_384': f"{clean_prefix}_SRC_PLT_{current_plate}",
-                    'Source_Well_384': assigned_well,
-                    'Well_Sub_Index': sub_idx + 1,
-                    'Compounds_In_Pool': actual_pool_count,
-                    'Backflush_Required': "YES" if dmso_backflush_nl > 0 else "NO",
-                    'NCGC_ID': comp['SAMPLE_ID'],
-                    'Exact_Mass': round(comp['Exact_Mass'], 4),
-                    'Target_m_z': round(comp['Target_m_z'], 4),
-                    'Min_Δm/z_In_Well': round(min_delta_observed, 4) if min_delta_observed != float('inf') else 0.0,
-                    'DMSO_Backflush_Volume_nL': max(0.0, dmso_backflush_nl),
-                    'Total_Well_Fluid_Vol_nL': target_source_vol_nl,
-                    'Assay_Total_Volume_µL': assay_vol,
-                    'Assay_Target_Conc_µM': assay_conc,
-                    'Echo_Transfer_Volume_nL': round(echo_transfer_volume_nl, 2),
-                    'Ionization_Mode': comp['Predicted_Mode'],
-                    'SMILES': comp['SMILES']
-                })
+            for pool in stride_pools:
+                if not pool: continue
+                if well_pointer >= len(well_coordinates):
+                    well_pointer = 0
+                    current_plate += 1
+                    
+                assigned_well = well_coordinates[well_pointer]
+                well_pointer += 1
                 
-    return pd.DataFrame(pooled_records)
+                actual_pool_count = len(pool)
+                total_compound_fluid_nl = actual_pool_count * vol_comp
+                dmso_backflush_nl = target_source_vol_nl - total_compound_fluid_nl
+                
+                pool_mzs = sorted([comp['Target_m_z'] for comp in pool])
+                if len(pool_mzs) > 1:
+                    min_delta_observed = min(pool_mzs[i+1] - pool_mzs[i] for i in range(len(pool_mzs)-1))
+                else:
+                    min_delta_observed = float('inf')
+                    
+                for sub_idx, comp in enumerate(pool):
+                    pooled_records.append({
+                        'Source_Plate_384': f"{clean_prefix}_SRC_PLT_{current_plate}",
+                        'Source_Well_384': assigned_well,
+                        'Well_Sub_Index': sub_idx + 1,
+                        'Compounds_In_Pool': actual_pool_count,
+                        'Backflush_Required': "YES" if dmso_backflush_nl > 0 else "NO",
+                        'NCGC_ID': comp['SAMPLE_ID'],
+                        'Exact_Mass': round(comp['Exact_Mass'], 4),
+                        'Target_m_z': round(comp['Target_m_z'], 4),
+                        'Min_Δm/z_In_Well': round(min_delta_observed, 4) if min_delta_observed != float('inf') else 0.0,
+                        'DMSO_Backflush_Volume_nL': max(0.0, dmso_backflush_nl),
+                        'Total_Well_Fluid_Vol_nL': target_source_vol_nl,
+                        'Assay_Total_Volume_µL': assay_vol,
+                        'Assay_Target_Conc_µM': assay_conc,
+                        'Echo_Transfer_Volume_nL': round(echo_transfer_volume_nl, 2),
+                        'Ionization_Mode': comp['Predicted_Mode'],
+                        'SMILES': comp['SMILES']
+                    })
+                    
+        return pd.DataFrame(pooled_records)
 
-def generate_dual_interactive_html(df, target_pool_max):
-    source_dict = {}
-    assay_dict = {}
-    
-    for _, row in df.iterrows():
-        src_plt = row['Source_Plate_384']
-        src_well = row['Source_Well_384']
-        asy_plt = row['Assay_Plate_96']
-        asy_well = row['Assay_Well_96']
+    def generate_dual_interactive_html(df, target_pool_max):
+        source_dict = {}
+        assay_dict = {}
         
-        svg_text = ""
-        try:
-            mol = Chem.MolFromSmiles(row['SMILES'])
-            if mol:
-                drawer = rdMolDraw2D.MolDraw2DSVG(160, 160)
-                clean_mol = rdMolDraw2D.PrepareMolForDrawing(mol)
-                drawer.DrawMolecule(clean_mol)
-                drawer.FinishDrawing()
-                svg_text = drawer.GetDrawingText()
-        except:
+        for _, row in df.iterrows():
+            src_plt = row['Source_Plate_384']
+            src_well = row['Source_Well_384']
+            asy_plt = row['Assay_Plate_96']
+            asy_well = row['Assay_Well_96']
+            
             svg_text = ""
+            try:
+                mol = Chem.MolFromSmiles(row['SMILES'])
+                if mol:
+                    drawer = rdMolDraw2D.MolDraw2DSVG(160, 160)
+                    clean_mol = rdMolDraw2D.PrepareMolForDrawing(mol)
+                    drawer.DrawMolecule(clean_mol)
+                    drawer.FinishDrawing()
+                    svg_text = drawer.GetDrawingText()
+            except:
+                svg_text = ""
+                
+            comp_card = {
+                'id': row['NCGC_ID'],
+                'mass': row['Exact_Mass'],
+                'mz': row['Target_m_z'],
+                'smiles': row['SMILES'],
+                'img': svg_text,
+                'mode': row['Ionization_Mode'],
+                'backflush': int(row['DMSO_Backflush_Volume_nL']),
+                'actual_count': int(row['Compounds_In_Pool']),
+                'target_count': int(target_pool_max)
+            }
             
-        comp_card = {
-            'id': row['NCGC_ID'],
-            'mass': row['Exact_Mass'],
-            'mz': row['Target_m_z'],
-            'smiles': row['SMILES'],
-            'img': svg_text,
-            'mode': row['Ionization_Mode'],
-            'backflush': int(row['DMSO_Backflush_Volume_nL']),
-            'actual_count': int(row['Compounds_In_Pool']),
-            'target_count': int(target_pool_max)
-        }
+            if src_plt not in source_dict: source_dict[src_plt] = {}
+            if src_well not in source_dict[src_plt]: source_dict[src_plt][src_well] = []
+            source_dict[src_plt][src_well].append(comp_card)
+            
+            if asy_plt not in assay_dict: assay_dict[asy_plt] = {}
+            if asy_well not in assay_dict[asy_plt]: assay_dict[asy_plt][asy_well] = []
+            assay_dict[asy_plt][asy_well].append(comp_card)
+            
+        full_payload = json.dumps({'source': source_dict, 'assay': assay_dict})
         
-        if src_plt not in source_dict: source_dict[src_plt] = {}
-        if src_well not in source_dict[src_plt]: source_dict[src_plt][src_well] = []
-        source_dict[src_plt][src_well].append(comp_card)
-        
-        if asy_plt not in assay_dict: assay_dict[asy_plt] = {}
-        if asy_well not in assay_dict[asy_plt]: assay_dict[asy_plt][asy_well] = []
-        assay_dict[asy_plt][asy_well].append(comp_card)
-        
-    full_payload = json.dumps({'source': source_dict, 'assay': assay_dict})
-    
-    html_template = """<!DOCTYPE html>
+        html_template = """<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
@@ -494,222 +491,284 @@ def generate_dual_interactive_html(df, target_pool_max):
 </body>
 </html>
 """
-    return html_template.replace("{js_data_payload}", full_payload)
+        return html_template.replace("{js_data_payload}", full_payload)
 
-# ==========================================
-# 4. Main System Pipeline Processing
-# ==========================================
-if uploaded_file is not None:
-    if not plate_prefix.strip():
-        st.error("⚠️ **Missing Required Field:** You must enter a unique Plate Name Prefix above before running calculations in order to help prevent asset file name overlaps.")
-        st.stop()
+    # Calculation Execution
+    if uploaded_file is not None:
+        if not plate_prefix.strip():
+            st.error("⚠️ **Missing Required Field:** You must enter a unique Plate Name Prefix above before running calculations in order to help prevent asset file name overlaps.")
+            st.stop()
 
-    max_possible_compound_vol_nl = pool_size * vol_per_comp
-    target_source_vol_nl = target_source_vol_ul * 1000.0
-    
-    if max_possible_compound_vol_nl > target_source_vol_nl:
-        st.error(f"❌ **Physical Fluidic Paradox Error:** You have requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires a minimum fluid volume of **{max_possible_compound_vol_nl / 1000.0} µL** per well from the library compound aliquots alone, which physically overflows your target Echo source well capacity of **{target_source_vol_ul} µL**. The liquid handler cannot execute negative DMSO back-flushes. Please reduce the compounds per well, lower the individual aliquot volume, or expand the target source well volume configuration.")
-        st.stop()
-
-    with st.spinner("Executing double-stage library calculations..."):
+        max_possible_compound_vol_nl = pool_size * vol_per_comp
+        target_source_vol_nl = target_source_vol_ul * 1000.0
         
-        local_tmp_path = "temp_upload_data.sdf"
-        with open(local_tmp_path, "wb") as f:
-            f.write(uploaded_file.getvalue())
+        if max_possible_compound_vol_nl > target_source_vol_nl:
+            st.error(f"❌ **Physical Fluidic Paradox Error:** You have requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires a minimum fluid volume of **{max_possible_compound_vol_nl / 1000.0} µL** per well from the library compound aliquots alone, which physically overflows your target Echo source well capacity of **{target_source_vol_ul} µL**. The liquid handler cannot execute negative DMSO back-flushes. Please reduce the compounds per well, lower the individual aliquot volume, or expand the target source well volume configuration.")
+            st.stop()
+
+        with st.spinner("Executing double-stage library calculations..."):
             
-        raw_df, skipped_df = process_sdf(file_path=local_tmp_path)
-        if os.path.exists(local_tmp_path): os.remove(local_tmp_path)
-        
-        if not raw_df.empty:
-            lib_stock_uM = lib_stock_conc * 1000.0
-            
-            source_map = assign_wells_advanced(
-                raw_df, 
-                target_size=pool_size, 
-                prefix=plate_prefix, 
-                vol_comp=vol_per_comp,
-                target_source_vol_ul=target_source_vol_ul,
-                lib_stock_uM=lib_stock_uM,
-                assay_vol=dest_well_vol,
-                assay_conc=desired_conc
-            )
-            
-            unique_source_wells = source_map[['Source_Plate_384', 'Source_Well_384']].drop_duplicates().reset_index(drop=True)
-            
-            assay_rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-            assay_cols = range(1, 13)
-            assay_coordinates = [f"{r}{c:02d}" for r in assay_rows for c in assay_cols]
-            
-            coordinate_mapping_index = {}
-            for idx, r_wells in unique_source_wells.iterrows():
-                plate_idx = (idx // 96) + 1
-                well_idx = idx % 96
-                assigned_96_well = assay_coordinates[well_idx]
-                coordinate_mapping_index[(r_wells['Source_Plate_384'], r_wells['Source_Well_384'])] = (f"{plate_prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
-            
-            source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
-            source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
-            
-            source_map['Designated_Pool_Size'] = pool_size
-            source_map['Actual_Pool_Size'] = source_map['Compounds_In_Pool']
-            source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"⚠️ INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
-            
-            source_map = source_map.sort_values(by=['Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index']).reset_index(drop=True)
-            
-            total_384_wells = len(source_map['Source_Well_384'].unique())
-            
-            total_96_wells = len(source_map[['Assay_Plate_96', 'Assay_Well_96']].drop_duplicates())
-            plates_needed = math.ceil(total_96_wells / 96)
-            
-            backflush_wells_count = source_map[source_map['DMSO_Backflush_Volume_nL'] > 0]['Source_Well_384'].nunique()
-            
-            st.success("HTS Screening manifests successfully generated!")
-            
-            dash_col1, dash_col2, dash_col3, dash_col4 = st.columns(4)
-            dash_col1.metric("Total Library Compounds", len(raw_df))
-            dash_col2.metric("384-Well Source Pools (Out 1)", total_384_wells)
-            dash_col3.metric("96-Well Plates Needed", plates_needed)
-            dash_col4.metric("DMSO Back-Flush Actions", backflush_wells_count)
-            
-            with st.expander("Click to view structural omissions and data anomalies"):
-                if not skipped_df.empty:
-                    st.warning(f"Total entries filtered out from raw input file: {len(skipped_df)}")
-                    st.dataframe(skipped_df, use_container_width=True)
-                else:
-                    st.info("Pristine Library File: 0 structural exclusions or parsing failures recorded.")
-            
-            violating_pools = source_map[source_map['Min_Δm/z_In_Well'] < min_mz_threshold]['Source_Well_384'].nunique()
-            if violating_pools > 0:
-                st.warning(f"⚠️ Mass Resolution Alert: {violating_pools} well pools contain compounds falling below your preferred {min_mz_threshold} Da Δm/z resolution limit.")
-            else:
-                st.info(f"✅ Mass Resolution Checked: All pooling mixtures maintain structural Δm/z separation limits above {min_mz_threshold} Da.")
+            local_tmp_path = "temp_upload_data.sdf"
+            with open(local_tmp_path, "wb") as f:
+                f.write(uploaded_file.getvalue())
                 
-            # ==========================================
-            # 5. Multi-Deliverable Export Hub
-            # ==========================================
-            st.markdown("### Download Campaign Assets")
+            raw_df, skipped_df = process_sdf(file_path=local_tmp_path)
+            if os.path.exists(local_tmp_path): os.remove(local_tmp_path)
             
-            if uploaded_inventory is not None:
-                down_col0, down_col1, down_col2, down_col3, down_col4 = st.columns(5)
-            else:
-                down_col1, down_col2, down_col3, down_col4 = st.columns(4)
-            
-            if uploaded_inventory is not None:
-                try:
-                    if uploaded_inventory.name.endswith('.csv'):
-                        inv_df = pd.read_csv(uploaded_inventory)
+            if not raw_df.empty:
+                lib_stock_uM = lib_stock_conc * 1000.0
+                
+                source_map = assign_wells_advanced(
+                    raw_df, 
+                    target_size=pool_size, 
+                    prefix=plate_prefix, 
+                    vol_comp=vol_per_comp,
+                    target_source_vol_ul=target_source_vol_ul,
+                    lib_stock_uM=lib_stock_uM,
+                    assay_vol=dest_well_vol,
+                    assay_conc=desired_conc
+                )
+                
+                unique_source_wells = source_map[['Source_Plate_384', 'Source_Well_384']].drop_duplicates().reset_index(drop=True)
+                
+                assay_rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+                assay_cols = range(1, 13)
+                assay_coordinates = [f"{r}{c:02d}" for r in assay_rows for c in assay_cols]
+                
+                coordinate_mapping_index = {}
+                for idx, r_wells in unique_source_wells.iterrows():
+                    plate_idx = (idx // 96) + 1
+                    well_idx = idx % 96
+                    assigned_96_well = assay_coordinates[well_idx]
+                    coordinate_mapping_index[(r_wells['Source_Plate_384'], r_wells['Source_Well_384'])] = (f"{plate_prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
+                
+                source_map['Assay_Plate_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
+                source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
+                
+                source_map['Designated_Pool_Size'] = pool_size
+                source_map['Actual_Pool_Size'] = source_map['Compounds_In_Pool']
+                source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"⚠️ INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
+                
+                source_map = source_map.sort_values(by=['Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index']).reset_index(drop=True)
+                
+                total_384_wells = len(source_map['Source_Well_384'].unique())
+                
+                total_96_wells = len(source_map[['Assay_Plate_96', 'Assay_Well_96']].drop_duplicates())
+                plates_needed = math.ceil(total_96_wells / 96)
+                
+                backflush_wells_count = source_map[source_map['DMSO_Backflush_Volume_nL'] > 0]['Source_Well_384'].nunique()
+                
+                st.success("HTS Screening manifests successfully generated!")
+                
+                dash_col1, dash_col2, dash_col3, dash_col4 = st.columns(4)
+                dash_col1.metric("Total Library Compounds", len(raw_df))
+                dash_col2.metric("384-Well Source Pools (Out 1)", total_384_wells)
+                dash_col3.metric("96-Well Plates Needed", plates_needed)
+                dash_col4.metric("DMSO Back-Flush Actions", backflush_wells_count)
+                
+                with st.expander("Click to view structural omissions and data anomalies"):
+                    if not skipped_df.empty:
+                        st.warning(f"Total entries filtered out from raw input file: {len(skipped_df)}")
+                        st.dataframe(skipped_df, use_container_width=True)
                     else:
-                        inv_df = pd.read_excel(uploaded_inventory)
+                        st.info("Pristine Library File: 0 structural exclusions or parsing failures recorded.")
+                
+                violating_pools = source_map[source_map['Min_Δm/z_In_Well'] < min_mz_threshold]['Source_Well_384'].nunique()
+                if violating_pools > 0:
+                    st.warning(f"⚠️ Mass Resolution Alert: {violating_pools} well pools contain compounds falling below your preferred {min_mz_threshold} Da Δm/z resolution limit.")
+                else:
+                    st.info(f"✅ Mass Resolution Checked: All pooling mixtures maintain structural Δm/z separation limits above {min_mz_threshold} Da.")
                     
-                    inv_df.columns = [str(c).strip() for c in inv_df.columns]
-                    
-                    expected_id_col = next((c for c in inv_df.columns if c.upper() in ['NCGC_ID', 'SAMPLE_ID', 'ID', 'COMPOUND_ID']), None)
-                    expected_plt_col = next((c for c in inv_df.columns if 'PLATE' in c.upper() or 'BARCODE' in c.upper()), None)
-                    expected_wel_col = next((c for c in inv_df.columns if 'WELL' in c.upper() or 'COORD' in c.upper()), None)
-                    
-                    if expected_id_col and expected_plt_col and expected_wel_col:
-                        inv_df['match_id'] = inv_df[expected_id_col].astype(str).str.strip()
-                        source_map['match_id'] = source_map['NCGC_ID'].astype(str).str.strip()
-                        
-                        consolidation_df = pd.merge(source_map, inv_df, on='match_id', how='inner')
-                        
-                        if not consolidation_df.empty:
-                            picklist_1536_to_384 = consolidation_df[[
-                                expected_plt_col, expected_wel_col, 'Source_Plate_384', 'Source_Well_384'
-                            ]].copy()
-                            picklist_1536_to_384['Transfer Volume'] = vol_per_comp
-                            picklist_1536_to_384.columns = [
-                                'Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume'
-                            ]
-                            
-                            picklist_1536_to_384 = picklist_1536_to_384.drop_duplicates().reset_index(drop=True)
-                            
-                            buf_up = io.StringIO()
-                            picklist_1536_to_384.to_csv(buf_up, index=False)
-                            csv_up = buf_up.getvalue()
-                            
-                            down_col0.download_button(
-                                label="0. Download 1536 ➔ 384 Picklist (.csv)",
-                                data=csv_up,
-                                file_name=f"{plate_prefix.strip().lower()}_1536_to_384_consolidation.csv",
-                                mime="text/csv",
-                                use_container_width=True
-                            )
+                # Deliverables
+                st.markdown("### Download Campaign Assets")
+                
+                if uploaded_inventory is not None:
+                    down_col0, down_col1, down_col2, down_col3, down_col4 = st.columns(5)
+                else:
+                    down_col1, down_col2, down_col3, down_col4 = st.columns(4)
+                
+                if uploaded_inventory is not None:
+                    try:
+                        if uploaded_inventory.name.endswith('.csv'):
+                            inv_df = pd.read_csv(uploaded_inventory)
                         else:
-                            down_col0.error("0 Match IDs identified between files.")
-                    else:
-                        down_col0.error("Missing mapping column keys.")
-                except Exception as ex:
-                    down_col0.error(f"Upstream pipeline error: {str(ex)}")
+                            inv_df = pd.read_excel(uploaded_inventory)
+                        
+                        inv_df.columns = [str(c).strip() for c in inv_df.columns]
+                        
+                        expected_id_col = next((c for c in inv_df.columns if c.upper() in ['NCGC_ID', 'SAMPLE_ID', 'ID', 'COMPOUND_ID']), None)
+                        expected_plt_col = next((c for c in inv_df.columns if 'PLATE' in c.upper() or 'BARCODE' in c.upper()), None)
+                        expected_wel_col = next((c for c in inv_df.columns if 'WELL' in c.upper() or 'COORD' in c.upper()), None)
+                        
+                        if expected_id_col and expected_plt_col and expected_wel_col:
+                            inv_df['match_id'] = inv_df[expected_id_col].astype(str).str.strip()
+                            source_map['match_id'] = source_map['NCGC_ID'].astype(str).str.strip()
+                            
+                            consolidation_df = pd.merge(source_map, inv_df, on='match_id', how='inner')
+                            
+                            if not consolidation_df.empty:
+                                picklist_1536_to_384 = consolidation_df[[
+                                    expected_plt_col, expected_wel_col, 'Source_Plate_384', 'Source_Well_384'
+                                ]].copy()
+                                picklist_1536_to_384['Transfer Volume'] = vol_per_comp
+                                picklist_1536_to_384.columns = [
+                                    'Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume'
+                                ]
+                                
+                                picklist_1536_to_384 = picklist_1536_to_384.drop_duplicates().reset_index(drop=True)
+                                
+                                buf_up = io.StringIO()
+                                picklist_1536_to_384.to_csv(buf_up, index=False)
+                                csv_up = buf_up.getvalue()
+                                
+                                down_col0.download_button(
+                                    label="0. Download 1536 ➔ 384 Picklist (.csv)",
+                                    data=csv_up,
+                                    file_name=f"{plate_prefix.strip().lower()}_1536_to_384_consolidation.csv",
+                                    mime="text/csv",
+                                    use_container_width=True
+                                )
+                            else:
+                                down_col0.error("0 Match IDs identified between files.")
+                        else:
+                            down_col0.error("Missing mapping column keys.")
+                    except Exception as ex:
+                        down_col0.error(f"Upstream pipeline error: {str(ex)}")
 
-            src_excel_cols = [
-                'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
-                'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL'
-            ]
-            buf_src = io.BytesIO()
-            with pd.ExcelWriter(buf_src, engine='openpyxl') as writer:
-                source_map[src_excel_cols].to_excel(writer, sheet_name="384_Source_Prep", index=False)
-            buf_src.seek(0)
-            down_col1.download_button(
-                label="1. Download Source Prep Workbook (.xlsx)",
-                data=buf_src,
-                file_name=f"{plate_prefix.strip().lower()}_source_prep_manifest.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+                src_excel_cols = [
+                    'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
+                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL'
+                ]
+                buf_src = io.BytesIO()
+                with pd.ExcelWriter(buf_src, engine='openpyxl') as writer:
+                    source_map[src_excel_cols].to_excel(writer, sheet_name="384_Source_Prep", index=False)
+                buf_src.seek(0)
+                down_col1.download_button(
+                    label="1. Download Source Prep Workbook (.xlsx)",
+                    data=buf_src,
+                    file_name=f"{plate_prefix.strip().lower()}_source_prep_manifest.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+                
+                asy_excel_cols = [
+                    'Assay_Plate_96', 'Assay_Well_96', 'Pool_Status', 'Designated_Pool_Size', 'Actual_Pool_Size', 
+                    'Source_Plate_384', 'Source_Well_384', 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 
+                    'Assay_Total_Volume_µL', 'Assay_Target_Conc_µM', 'Echo_Transfer_Volume_nL', 'Ionization_Mode'
+                ]
+                buf_asy = io.BytesIO()
+                with pd.ExcelWriter(buf_asy, engine='openpyxl') as writer:
+                    source_map[asy_excel_cols].to_excel(writer, sheet_name="96_Assay_Run", index=False)
+                buf_asy.seek(0)
+                down_col2.download_button(
+                    label="2. Download Assay Run Manifest (.xlsx)",
+                    data=buf_asy,
+                    file_name=f"{plate_prefix.strip().lower()}_assay_run_manifest.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+                
+                html_payload = generate_dual_interactive_html(df=source_map, target_pool_max=pool_size)
+                down_col3.download_button(
+                    label="3. Download Campaign Browser Map (.html)",
+                    data=html_payload,
+                    file_name=f"{plate_prefix.strip().lower()}_campaign_map.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
+                
+                echo_picklist_df = source_map[[
+                    'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Echo_Transfer_Volume_nL'
+                ]].drop_duplicates().reset_index(drop=True)
+                
+                echo_picklist_df.columns = [
+                    'Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume'
+                ]
+                
+                buf_pick = io.StringIO()
+                echo_picklist_df.to_csv(buf_pick, index=False)
+                csv_pick = buf_pick.getvalue()
+                
+                down_col4.download_button(
+                    label="4. Download Echo Run Picklist (.csv)",
+                    data=csv_pick,
+                    file_name=f"{plate_prefix.strip().lower()}_echo_assay_picklist.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                
+                st.markdown("### Unified Data Matrix Preview")
+                st.dataframe(source_map[[
+                    'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Backflush_Required',
+                    'Assay_Plate_96', 'Assay_Well_96', 'Pool_Status', 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 
+                    'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Assay_Target_Conc_µM', 'Echo_Transfer_Volume_nL'
+                ]], use_container_width=True)
+                
+            else:
+                st.error("SDF parsing returned an empty data array. Check property tagging fields.")
+
+# ==========================================
+# TAB 2: PLATE MAP UNPIVOTER TOOL
+# ==========================================
+with tab2:
+    st.subheader("🧪 Visual Plate Map Unpivoter")
+    st.write(
+        "Upload 2D visual plate map Excel sheets (32×48 or 16×24 grids) "
+        "to automatically convert them into linearized CSV manifests."
+    )
+
+    uploaded_map_file = st.file_uploader("Upload Excel Plate Map (.xlsx)", type=["xlsx", "xls"], key="unpivoter_uploader")
+
+    if uploaded_map_file is not None:
+        try:
+            xls_file = pd.ExcelFile(uploaded_map_file)
+            st.success(f"Loaded Excel file with {len(xls_file.sheet_names)} sheet(s): **{', '.join(xls_file.sheet_names)}**")
             
-            asy_excel_cols = [
-                'Assay_Plate_96', 'Assay_Well_96', 'Pool_Status', 'Designated_Pool_Size', 'Actual_Pool_Size', 
-                'Source_Plate_384', 'Source_Well_384', 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 
-                'Assay_Total_Volume_µL', 'Assay_Target_Conc_µM', 'Echo_Transfer_Volume_nL', 'Ionization_Mode'
-            ]
-            buf_asy = io.BytesIO()
-            with pd.ExcelWriter(buf_asy, engine='openpyxl') as writer:
-                source_map[asy_excel_cols].to_excel(writer, sheet_name="96_Assay_Run", index=False)
-            buf_asy.seek(0)
-            down_col2.download_button(
-                label="2. Download Assay Run Manifest (.xlsx)",
-                data=buf_asy,
-                file_name=f"{plate_prefix.strip().lower()}_assay_run_manifest.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+            with st.expander("⚙️ Parsing Settings", expanded=False):
+                col_offset = st.number_input(
+                    "Data Start Column Index (0-indexed; default = 5 for Excel Column F)", 
+                    value=5, 
+                    min_value=0
+                )
+
+            all_records = []
+            for sheet_name in xls_file.sheet_names:
+                df_map = pd.read_excel(xls_file, sheet_name=sheet_name, header=None)
+                
+                for r_idx in range(df_map.shape[0]):
+                    row_label = str(df_map.iloc[r_idx, 0]).strip()
+                    if not row_label or row_label.lower() == 'nan':
+                        continue
+                    
+                    for c_idx in range(col_offset, df_map.shape[1]):
+                        val = df_map.iloc[r_idx, c_idx]
+                        if pd.notna(val):
+                            val_str = str(val).strip()
+                            if val_str and val_str.lower() != 'nan':
+                                well_col = c_idx - (col_offset - 1)
+                                well_id = f"{row_label}{well_col:02d}"
+                                all_records.append({
+                                    "NCGC_ID": val_str,
+                                    "Plate_1536": sheet_name,
+                                    "Well_1536": well_id
+                                })
             
-            html_payload = generate_dual_interactive_html(df=source_map, target_pool_max=pool_size)
-            down_col3.download_button(
-                label="3. Download Campaign Browser Map (.html)",
-                data=html_payload,
-                file_name=f"{plate_prefix.strip().lower()}_campaign_map.html",
-                mime="text/html",
-                use_container_width=True
-            )
+            flat_df = pd.DataFrame(all_records)
+            st.metric(label="Total Linearized Wells Extracted", value=len(flat_df))
             
-            echo_picklist_df = source_map[[
-                'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Echo_Transfer_Volume_nL'
-            ]].drop_duplicates().reset_index(drop=True)
+            st.subheader("Data Preview")
+            st.dataframe(flat_df.head(20), use_container_width=True)
             
-            echo_picklist_df.columns = [
-                'Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume'
-            ]
+            csv_buffer = io.StringIO()
+            flat_df.to_csv(csv_buffer, index=False)
             
-            buf_pick = io.StringIO()
-            echo_picklist_df.to_csv(buf_pick, index=False)
-            csv_pick = buf_pick.getvalue()
-            
-            down_col4.download_button(
-                label="4. Download Echo Run Picklist (.csv)",
-                data=csv_pick,
-                file_name=f"{plate_prefix.strip().lower()}_echo_assay_picklist.csv",
+            st.download_button(
+                label="⬇️ Download Linearized CSV Map",
+                data=csv_buffer.getvalue(),
+                file_name="NPC_2.1_flat_master_map.csv",
                 mime="text/csv",
-                use_container_width=True
+                type="primary"
             )
             
-            st.markdown("### Unified Data Matrix Preview")
-            st.dataframe(source_map[[
-                'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Backflush_Required',
-                'Assay_Plate_96', 'Assay_Well_96', 'Pool_Status', 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 
-                'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Assay_Target_Conc_µM', 'Echo_Transfer_Volume_nL'
-            ]], use_container_width=True)
-            
-        else:
-            st.error("SDF parsing returned an empty data array. Check property tagging fields.")
+        except Exception as e:
+            st.error(f"Error processing file: {e}")
