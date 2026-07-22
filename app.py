@@ -46,10 +46,17 @@ with up_col1:
     uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
 
 with up_col2:
-    st.info("💡 **Need to convert a visual Excel plate map?** If your 1536 map is formatted as a 2D visual grid (A–AF rows), unpivot it into a clean manifest first:")
+    st.info(
+        "**Need to convert a visual Excel plate map?** "
+        "If your 1536 map is formatted as a 2D visual grid (A–AF rows), "
+        "click **01 Map Converter** in the left sidebar menu to convert it first!"
+    )
     
-    # Native in-app navigation button
-    st.page_link("pages/01_Map_Converter.py", label="Open Plate Map Unpivoter", icon="🧪")
+    # Fail-safe page link (won't crash the app if Streamlit Cloud is still re-indexing)
+    try:
+        st.page_link("pages/01_Map_Converter.py", label="Open Plate Map Unpivoter", icon="🧪")
+    except Exception:
+        pass
     
     uploaded_inventory = st.file_uploader(
         "Optional: Upload 1536 Master Plate Maps", 
