@@ -25,7 +25,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ==========================================
 with tab1:
     st.markdown(
-        "Compiles library entries into consolidated 384-well acoustic source pools, "
+        "Created by Colin Gordy for the development of a semi-automated ASMS binding assay utilizing NCATS Libraries. Compiles library entries into consolidated 384-well acoustic source pools, "
         "tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates."
     )
 
