@@ -48,9 +48,9 @@ with up_col1:
 with up_col2:
     # 💡 MAP CONVERTER CALLOUT ADDED HERE
     st.info(
-        "💡 **Need to convert a visual Excel plate map?** "
+        "**Need to convert a visual Excel plate map?** "
         "If your 1536 map is formatted as a 2D visual grid (A–AF rows), "
-        "use our [Plate Map Unpivoter](https://your-converter-app.streamlit.app) "
+        "use my [Plate Map Unpivoter](https://your-converter-app.streamlit.app) "
         "to generate a clean CSV manifest first!"
     )
     uploaded_inventory = st.file_uploader(
