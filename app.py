@@ -46,13 +46,11 @@ with up_col1:
     uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
 
 with up_col2:
-    # 💡 MAP CONVERTER CALLOUT ADDED HERE
-    st.info(
-        "**Need to convert a visual Excel plate map?** "
-        "If your 1536 map is formatted as a 2D visual grid (A–AF rows), "
-        "use my [Plate Map Unpivoter](https://your-converter-app.streamlit.app) "
-        "to generate a clean CSV manifest first!"
-    )
+    st.info("💡 **Need to convert a visual Excel plate map?** If your 1536 map is formatted as a 2D visual grid (A–AF rows), unpivot it into a clean manifest first:")
+    
+    # Native in-app navigation button
+    st.page_link("pages/01_Map_Converter.py", label="Open Plate Map Unpivoter", icon="🧪")
+    
     uploaded_inventory = st.file_uploader(
         "Optional: Upload 1536 Master Plate Maps", 
         type=["csv", "xlsx"], 
