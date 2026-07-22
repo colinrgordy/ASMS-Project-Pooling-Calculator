@@ -11,7 +11,9 @@ import json
 st.set_page_config(page_title="ASMS Pooling Engine", page_icon="⚜", layout="wide")
 
 st.title("NCATS ASMS Compound Pooling Engine")
-st.markdown("Created by Colin Gordy for use in the development of a semi-automated, small-molecule binders discovery assay utilizing HRMS. This tool helps with HTS workflows: Compiles library entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates. Using .SDF files containing NCGC IDs and SMILES, the tool returns four outputs: (1) An .xlsx file for creating an acoustic 384-well source plate with the 1536-well CoMa library plates, (2) An .xlsx file for using the 384-well acoustic source plate and standard, 96-well KingFisher Flex plates as the destination, (3) A .HTML file for an interactive visualization of both plate maps, (4) a CSV picklist file for the Echo to use the generated 384-well source plate for dispensing into the 96-well destination plate. Parameters can be customized using the side toolbar.")# ==========================================
+st.markdown("Created by Colin Gordy for use in the development of a semi-automated, small-molecule binders discovery assay utilizing HRMS. This tool helps with HTS workflows: Compiles library entries into consolidated 384-well acoustic source pools, tracks volume normalization, and maps subsequent nanoliter transfers to 96-well assay target plates. Using .SDF files containing NCGC IDs and SMILES, the tool returns four outputs: (1) An .xlsx file for creating an acoustic 384-well source plate with the 1536-well CoMa library plates, (2) An .xlsx file for using the 384-well acoustic source plate and standard, 96-well KingFisher Flex plates as the destination, (3) A .HTML file for an interactive visualization of both plate maps, (4) a CSV picklist file for the Echo to use the generated 384-well source plate for dispensing into the 96-well destination plate. Parameters can be customized using the side toolbar.")
+
+# ==========================================
 # 1. Sidebar Control Panel
 # ==========================================
 st.sidebar.header("Configuration Panel")
@@ -47,12 +49,11 @@ with up_col1:
 
 with up_col2:
     st.info(
-        "**Need to convert a visual Excel plate map?** "
+        "💡 **Need to convert a visual Excel plate map?** "
         "If your 1536 map is formatted as a 2D visual grid (A–AF rows), "
         "click **01 Map Converter** in the left sidebar menu to convert it first!"
     )
     
-    # Fail-safe page link (won't crash the app if Streamlit Cloud is still re-indexing)
     try:
         st.page_link("pages/01_Map_Converter.py", label="Open Plate Map Unpivoter", icon="🧪")
     except Exception:
@@ -64,7 +65,7 @@ with up_col2:
         help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file."
     )
 
-# # ==========================================
+# ==========================================
 # 3. Computational Core Functions
 # ==========================================
 def process_sdf(file_path):
@@ -499,7 +500,6 @@ def generate_dual_interactive_html(df, target_pool_max):
 # 4. Main System Pipeline Processing
 # ==========================================
 if uploaded_file is not None:
-    # 🛠️ FIXED: Added hard validation gate stop to block execution if the required naming field is missing
     if not plate_prefix.strip():
         st.error("⚠️ **Missing Required Field:** You must enter a unique Plate Name Prefix above before running calculations in order to help prevent asset file name overlaps.")
         st.stop()
