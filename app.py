@@ -613,6 +613,11 @@ with tab1:
                                 
                                 picklist_1536_to_384 = picklist_1536_to_384.drop_duplicates().reset_index(drop=True)
                                 
+                                # 🛠️ SORT BY SOURCE PLATE FIRST TO ELIMINATE PLATE SWAPS
+                                picklist_1536_to_384 = picklist_1536_to_384.sort_values(
+                                    by=['Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well']
+                                ).reset_index(drop=True)
+                                
                                 buf_up = io.StringIO()
                                 picklist_1536_to_384.to_csv(buf_up, index=False)
                                 csv_up = buf_up.getvalue()
