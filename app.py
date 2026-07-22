@@ -15,9 +15,9 @@ st.title("NCATS ASMS Compound Pooling & Quality Control Suite")
 # Top Navigation Tabs
 tab1, tab2, tab3, tab4 = st.tabs([
     "⚜ 1. Pooling Engine", 
-    "🧪 2. Map Unpivoter", 
-    "📊 3. Survey Pre-Filter", 
-    "⚡ 4. Post-Run Reconciler"
+    "2. Map Unpivoter", 
+    "3. Survey Pre-Filter", 
+    "4. Post-Run Reconciler"
 ])
 
 # ==========================================
@@ -212,7 +212,7 @@ with tab1:
 
     if uploaded_file is not None:
         if not plate_prefix.strip():
-            st.error("⚠️ **Missing Required Field:** Enter a unique Plate Name Prefix above.")
+            st.error("**Missing Required Field:** Enter a unique Plate Name Prefix above.")
             st.stop()
 
         with st.spinner("Calculating library pools..."):
@@ -298,7 +298,7 @@ with tab1:
 # TAB 2: PLATE MAP UNPIVOTER
 # ==========================================
 with tab2:
-    st.subheader("🧪 Visual Plate Map Unpivoter")
+    st.subheader("Visual Plate Map Unpivoter")
     st.write("Convert 2D visual grid Excel sheets (A–AF rows) into flat CSV manifests.")
 
     uploaded_map_file = st.file_uploader("Upload Excel Plate Map (.xlsx)", type=["xlsx", "xls"], key="unpivoter_uploader")
@@ -326,7 +326,7 @@ with tab2:
             
             buf = io.StringIO()
             flat_df.to_csv(buf, index=False)
-            st.download_button("⬇️ Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
+            st.download_button("Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
@@ -334,7 +334,7 @@ with tab2:
 # TAB 3: ECHO SURVEY VOLUME PRE-FILTER
 # ==========================================
 with tab3:
-    st.subheader("📊 Echo Survey Volume Pre-Filter")
+    st.subheader("Echo Survey Volume Pre-Filter")
     st.write("Cross-reference your 1536 master plate map against an Echo Volume Survey spreadsheet to filter out low-volume wells before running calculations.")
 
     col_s1, col_s2 = st.columns(2)
@@ -393,15 +393,15 @@ with tab3:
 
             buf_clean = io.StringIO()
             clean_wells.to_csv(buf_clean, index=False)
-            st.download_button("⬇️ Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
+            st.download_button("Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
 
             if not depleted_wells.empty:
-                st.subheader("⚠️ Depleted Compounds Reorder Manifest")
+                st.subheader("Depleted Compounds Reorder Manifest")
                 st.dataframe(depleted_wells[['NCGC_ID', 'Plate_1536', 'Well_1536', 'Measured_Volume_uL']], use_container_width=True)
                 
                 buf_dep = io.StringIO()
                 depleted_wells.to_csv(buf_dep, index=False)
-                st.download_button("⬇️ Download Reorder Manifest (.csv)", buf_dep.getvalue(), "depleted_compounds_reorder_list.csv", "text/csv")
+                st.download_button("Download Reorder Manifest (.csv)", buf_dep.getvalue(), "depleted_compounds_reorder_list.csv", "text/csv")
 
         except Exception as ex:
             st.error(f"Error parsing survey file: {ex}")
@@ -410,7 +410,7 @@ with tab3:
 # TAB 4: POST-RUN ECHO EXCEPTION RECONCILER
 # ==========================================
 with tab4:
-    st.subheader("⚡ Post-Run Echo Exception Reconciler")
+    st.subheader("Post-Run Echo Exception Reconciler")
     st.write("Upload an Echo Exception/Transfer Report after a run to automatically calculate corrected DMSO back-flushes and strip skipped compounds from downstream manifests.")
 
     col_r1, col_r2 = st.columns(2)
@@ -476,7 +476,7 @@ with tab4:
 
                 buf_bf = io.StringIO()
                 backflush_picklist.to_csv(buf_bf, index=False)
-                st.download_button("⬇️ Download Corrected Back-flush Picklist (.csv)", buf_bf.getvalue(), "corrected_dmso_backflush_picklist.csv", "text/csv", type="primary")
+                st.download_button("Download Corrected Back-flush Picklist (.csv)", buf_bf.getvalue(), "corrected_dmso_backflush_picklist.csv", "text/csv", type="primary")
 
         except Exception as ex_recon:
             st.error(f"Error reconciling report: {ex_recon}")
