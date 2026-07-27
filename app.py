@@ -11,14 +11,14 @@ import re
 
 st.set_page_config(page_title="ASMS Compound Suite", page_icon="⚜", layout="wide")
 
-st.title("NCATS ASMS Compound Pooling & Quality Control Suite")
+st.title("NCATS ASMS Compound Pooling & Quality Control Panel")
 
 # Top Navigation Tabs
 tab1, tab2, tab3, tab4 = st.tabs([
-    "⚜ 1. Pooling Engine", 
-    "🧪 2. Map Unpivoter", 
-    "📊 3. Survey Pre-Filter", 
-    "⚡ 4. Post-Run Reconciler"
+    "1. Pooling Engine", 
+    "2. Map Unpivoter", 
+    "3. Survey Pre-Filter", 
+    "4. Post-Run Reconciler"
 ])
 
 def generate_dual_interactive_html(df, target_pool_max):
@@ -260,10 +260,10 @@ def generate_dual_interactive_html(df, target_pool_max):
             
             let headerHTML = `<span>Contents of ${plateContextLabel}: ${wellName} (${wellModeLabel} Mode)</span>`;
             if(currentViewMode === 'source' && compounds[0].backflush > 0) {
-                headerHTML += `<span class="backflush-tag">⚠️ DMSO Back-flush: +${compounds[0].backflush} nL</span>`;
+                headerHTML += `<span class="backflush-tag">DMSO Back-flush: +${compounds[0].backflush} nL</span>`;
             }
             if(currentViewMode === 'assay' && compounds[0].actual_count < compounds[0].target_count) {
-                headerHTML += `<span class="warning-tag">⚠️ Incomplete Pool: ${compounds[0].actual_count}/${compounds[0].target_count} Compounds</span>`;
+                headerHTML += `<span class="warning-tag">Incomplete Pool: ${compounds[0].actual_count}/${compounds[0].target_count} Compounds</span>`;
             }
             document.getElementById('panelTitle').innerHTML = headerHTML;
             
@@ -333,7 +333,7 @@ with tab1:
         uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
 
     with up_col2:
-        st.info("💡 **Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first!")
+        st.info("**Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first.")
         uploaded_inventory = st.file_uploader(
             "Optional: Upload 1536 Master Plate Maps", 
             type=["csv", "xlsx", "xls"], 
@@ -500,14 +500,14 @@ with tab1:
     # Main Pipeline Execution
     if uploaded_file is not None:
         if not plate_prefix.strip():
-            st.error("⚠️ **Missing Required Field:** Enter a unique Plate Name Prefix above before running calculations.")
+            st.error("**Missing Required Field:** Enter a unique Plate Name Prefix above before running calculations.")
             st.stop()
 
         max_possible_compound_vol_nl = pool_size * vol_per_comp
         target_source_vol_nl = target_source_vol_ul * 1000.0
         
         if max_possible_compound_vol_nl > target_source_vol_nl:
-            st.error(f"❌ **Physical Fluidic Paradox Error:** You requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires **{max_possible_compound_vol_nl / 1000.0} µL** per well from library aliquots alone, physically overflowing your target source well capacity of **{target_source_vol_ul} µL**.")
+            st.error(f"**Physical Fluidic Paradox Error:** You requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires **{max_possible_compound_vol_nl / 1000.0} µL** per well from library aliquots alone, physically overflowing your target source well capacity of **{target_source_vol_ul} µL**.")
             st.stop()
 
         with st.spinner("Executing double-stage library calculations..."):
@@ -575,9 +575,9 @@ with tab1:
                 
                 violating_pools = source_map[source_map['Min_Δm/z_In_Well'] < min_mz_threshold]['Source_Well_384'].nunique()
                 if violating_pools > 0:
-                    st.warning(f"⚠️ Mass Resolution Alert: {violating_pools} well pools contain compounds falling below your preferred {min_mz_threshold} Da Δm/z resolution limit.")
+                    st.warning(f"Mass Resolution Alert: {violating_pools} well pools contain compounds falling below your preferred {min_mz_threshold} Da Δm/z resolution limit.")
                 else:
-                    st.info(f"✅ Mass Resolution Checked: All pooling mixtures maintain structural Δm/z separation limits above {min_mz_threshold} Da.")
+                    st.info(f"Mass Resolution Checked: All pooling mixtures maintain structural Δm/z separation limits above {min_mz_threshold} Da.")
                     
                 st.markdown("### Download Campaign Assets")
                 
@@ -619,7 +619,7 @@ with tab1:
                                 picklist_1536_to_384.to_csv(buf_up, index=False)
                                 csv_up = buf_up.getvalue()
                                 
-                                st.success(f"✅ **1536 ➔ 384 Consolidation Picklist Generated!** Matched {len(consolidation_df)} compound locations.")
+                                st.success(f"**1536 ➔ 384 Consolidation Picklist Generated!** Matched {len(consolidation_df)} compound locations.")
                                 st.download_button(
                                     label="0. Download 1536 ➔ 384 Consolidation Picklist (.csv)",
                                     data=csv_up,
@@ -629,9 +629,9 @@ with tab1:
                                     use_container_width=False
                                 )
                             else:
-                                st.error("⚠️ **0 Match IDs Identified:** Make sure your 1536 Master Map contains an 'NCGC_ID' column matching the SDF.")
+                                st.error("**0 Match IDs Identified:** Make sure your 1536 Master Map contains an 'NCGC_ID' column matching the SDF.")
                         else:
-                            st.error(f"⚠️ **Missing Required Mapping Columns:** Need 'NCGC_ID', 'Plate_1536', and 'Well_1536' in Master Map. Found columns: {list(inv_df.columns)}")
+                            st.error(f"**Missing Required Mapping Columns:** Need 'NCGC_ID', 'Plate_1536', and 'Well_1536' in Master Map. Found columns: {list(inv_df.columns)}")
                     except Exception as ex:
                         st.error(f"Upstream pipeline error: {str(ex)}")
 
@@ -713,7 +713,7 @@ with tab1:
 # TAB 2: PLATE MAP UNPIVOTER (CORRECTED)
 # ==========================================
 with tab2:
-    st.subheader("🧪 Visual Plate Map Unpivoter")
+    st.subheader("Visual Plate Map Unpivoter")
     st.write("Convert 2D visual grid Excel sheets (A–AF rows) into flat CSV manifests.")
 
     uploaded_map_file = st.file_uploader("Upload Excel Plate Map (.xlsx)", type=["xlsx", "xls"], key="unpivoter_uploader")
@@ -742,7 +742,7 @@ with tab2:
             
             buf = io.StringIO()
             flat_df.to_csv(buf, index=False)
-            st.download_button("⬇️ Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
+            st.download_button("Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
@@ -750,7 +750,7 @@ with tab2:
 # TAB 3: ECHO SURVEY VOLUME PRE-FILTER
 # ==========================================
 with tab3:
-    st.subheader("📊 Echo Survey Volume Pre-Filter")
+    st.subheader("Echo Survey Volume Pre-Filter")
     st.write("Cross-reference your 1536 master plate map against an Echo Volume Survey spreadsheet to filter out low-volume wells before running calculations.")
 
     col_s1, col_s2 = st.columns(2)
@@ -830,15 +830,15 @@ with tab3:
 
             buf_clean = io.StringIO()
             clean_wells.to_csv(buf_clean, index=False)
-            st.download_button("⬇️ Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
+            st.download_button("Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
 
             if not depleted_wells.empty:
-                st.subheader("⚠️ Depleted Compounds Reorder Manifest")
+                st.subheader("Depleted Compounds Reorder Manifest")
                 st.dataframe(depleted_wells[['NCGC_ID', 'Plate_1536', 'Well_1536', 'Measured_Volume_uL']], use_container_width=True)
                 
                 buf_dep = io.StringIO()
                 depleted_wells.to_csv(buf_dep, index=False)
-                st.download_button("⬇️ Download Reorder Manifest (.csv)", buf_dep.getvalue(), "depleted_compounds_reorder_list.csv", "text/csv")
+                st.download_button("Download Reorder Manifest (.csv)", buf_dep.getvalue(), "depleted_compounds_reorder_list.csv", "text/csv")
 
         except Exception as ex:
             st.error(f"Error parsing survey file: {ex}")
@@ -847,7 +847,7 @@ with tab3:
 # TAB 4: POST-RUN ECHO EXCEPTION RECONCILER (SMART IONIZATION MODE RECONSTRUCTION)
 # ==========================================
 with tab4:
-    st.subheader("⚡ Post-Run Echo Exception Reconciler & Asset Generator")
+    st.subheader("Post-Run Echo Exception Reconciler & Asset Generator")
     st.write("Upload an Echo Exception/Transfer Report alongside your Source Prep Manifest to recalculate DMSO back-flushes, update campaign manifests, and re-render your interactive HTML map.")
 
     col_r1, col_r2 = st.columns(2)
@@ -981,7 +981,7 @@ with tab4:
                     
                     buf_mbf = io.StringIO()
                     master_bf.to_csv(buf_mbf, index=False)
-                    st.download_button("⬇️ Master DMSO Back-flush Picklist (All Wells)", buf_mbf.getvalue(), "reconciled_master_dmso_backflush_picklist.csv", "text/csv", type="primary", use_container_width=True)
+                    st.download_button("Master DMSO Back-flush Picklist (All Wells)", buf_mbf.getvalue(), "reconciled_master_dmso_backflush_picklist.csv", "text/csv", type="primary", use_container_width=True)
 
                 with p_col2:
                     topup_rows = []
@@ -998,7 +998,7 @@ with tab4:
                     topup_bf = pd.DataFrame(topup_rows)
                     buf_tbf = io.StringIO()
                     topup_bf.to_csv(buf_tbf, index=False)
-                    st.download_button("⬇️ Exception Top-Up Picklist Only (Delta Vol)", buf_tbf.getvalue(), "exception_topup_dmso_picklist.csv", "text/csv", use_container_width=True)
+                    st.download_button("Exception Top-Up Picklist Only (Delta Vol)", buf_tbf.getvalue(), "exception_topup_dmso_picklist.csv", "text/csv", use_container_width=True)
 
                 st.markdown("### 2. Download Corrected Campaign Deliverables")
                 rc_col1, rc_col2, rc_col3, rc_col4 = st.columns(4)
