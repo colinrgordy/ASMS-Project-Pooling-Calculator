@@ -639,7 +639,7 @@ with tab1:
 
                 src_excel_cols = [
                     'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
-                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'SMILES'
+                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'Echo_Transfer_Volume_nL', 'SMILES'
                 ]
                 buf_src = io.BytesIO()
                 with pd.ExcelWriter(buf_src, engine='openpyxl') as writer:
@@ -901,7 +901,7 @@ with tab4:
                     dw = ft['dest_well']
                     sid = ft['sample_id']
                     matches = orig_df[orig_df['norm_source_well'] == dw]
-                    if sid:
+                    if sid and sid != 'nan' and sid != 'None':
                         sid_matches = matches[matches['NCGC_ID'].astype(str).str.contains(sid)]
                         if not sid_matches.empty:
                             rows_to_drop.extend(sid_matches.index.tolist())
@@ -911,7 +911,7 @@ with tab4:
                         
                 reconciled_df = orig_df.drop(index=list(set(rows_to_drop))).reset_index(drop=True)
                 
-                # RECOVERY STEP: Automatically construct Assay_Plate_96 / Assay_Well_96 if missing
+                # RECOVERY STEP 1: Automatically construct Assay_Plate_96 / Assay_Well_96 if missing
                 if 'Assay_Plate_96' not in reconciled_df.columns or 'Assay_Well_96' not in reconciled_df.columns:
                     unique_source_wells = reconciled_df[['Source_Plate_384', 'Source_Well_384']].drop_duplicates().reset_index(drop=True)
                     assay_rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -930,7 +930,10 @@ with tab4:
                     reconciled_df['Assay_Plate_96'] = reconciled_df.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
                     reconciled_df['Assay_Well_96'] = reconciled_df.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
 
-                # Fallback defaults for optional visual attributes
+                # RECOVERY STEP 2: Fallback defaults for missing columns
+                if 'Echo_Transfer_Volume_nL' not in reconciled_df.columns: reconciled_df['Echo_Transfer_Volume_nL'] = 100.0
+                if 'Assay_Total_Volume_µL' not in reconciled_df.columns: reconciled_df['Assay_Total_Volume_µL'] = 50.0
+                if 'Assay_Target_Conc_µM' not in reconciled_df.columns: reconciled_df['Assay_Target_Conc_µM'] = 10.0
                 if 'SMILES' not in reconciled_df.columns: reconciled_df['SMILES'] = ""
                 if 'Ionization_Mode' not in reconciled_df.columns: reconciled_df['Ionization_Mode'] = 'positive'
 
@@ -994,7 +997,7 @@ with tab4:
 
                 src_excel_cols = [
                     'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
-                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'SMILES'
+                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'Echo_Transfer_Volume_nL', 'SMILES'
                 ]
                 valid_src_cols = [c for c in src_excel_cols if c in reconciled_df.columns]
                 buf_rsrc = io.BytesIO()
