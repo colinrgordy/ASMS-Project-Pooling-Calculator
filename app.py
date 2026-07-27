@@ -746,7 +746,7 @@ with tab2:
             
             buf = io.StringIO()
             flat_df.to_csv(buf, index=False)
-            st.download_button("⬇️ Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
+            st.download_button("Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
@@ -830,7 +830,7 @@ with tab3:
 
             buf_clean = io.StringIO()
             clean_wells.to_csv(buf_clean, index=False)
-            st.download_button("⬇️ Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
+            st.download_button("Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
 
             if not depleted_wells.empty:
                 st.subheader("Depleted Compounds Reorder Manifest")
@@ -838,7 +838,7 @@ with tab3:
                 
                 buf_dep = io.StringIO()
                 depleted_wells.to_csv(buf_dep, index=False)
-                st.download_button("⬇️ Download Reorder Manifest (.csv)", buf_dep.getvalue(), "depleted_compounds_reorder_list.csv", "text/csv")
+                st.download_button("Download Reorder Manifest (.csv)", buf_dep.getvalue(), "depleted_compounds_reorder_list.csv", "text/csv")
 
         except Exception as ex:
             st.error(f"Error parsing survey file: {ex}")
@@ -847,7 +847,7 @@ with tab3:
 # TAB 4: POST-RUN ECHO EXCEPTION RECONCILER
 # ==========================================
 with tab4:
-    st.subheader("⚡ Post-Run Echo Exception Reconciler")
+    st.subheader("Post-Run Echo Exception Reconciler")
     st.write("Upload an Echo Exception/Transfer Report after a run to automatically calculate corrected DMSO back-flushes and strip skipped compounds from downstream manifests.")
 
     col_r1, col_r2 = st.columns(2)
@@ -929,7 +929,7 @@ with tab4:
 
                     buf_bf = io.StringIO()
                     backflush_picklist.to_csv(buf_bf, index=False)
-                    st.download_button("⬇️ Download Corrected Back-flush Picklist (.csv)", buf_bf.getvalue(), "corrected_dmso_backflush_picklist.csv", "text/csv", type="primary")
+                    st.download_button("Download Corrected Back-flush Picklist (.csv)", buf_bf.getvalue(), "corrected_dmso_backflush_picklist.csv", "text/csv", type="primary")
                 else:
                     st.info("No volume-skewed wells detected across evaluated pools.")
 
