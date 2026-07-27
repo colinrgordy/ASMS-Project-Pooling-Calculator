@@ -747,7 +747,7 @@ with tab2:
             st.error(f"Error processing file: {e}")
 
 # ==========================================
-# TAB 3: ECHO SURVEY VOLUME PRE-FILTER
+# TAB 3: ECHO SURVEY VOLUME PRE-FILTER (BULLETPROOF FIX)
 # ==========================================
 with tab3:
     st.subheader("📊 Echo Survey Volume Pre-Filter")
@@ -772,46 +772,55 @@ with tab3:
             
             row_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE','AF']
             
+            # 1. Convert survey raw values to numeric safely
+            df_numeric = df_survey_raw.apply(pd.to_numeric, errors='coerce')
+            
+            # 2. Identify rows with numeric survey data (rows having >= 3 numeric cells)
+            numeric_row_mask = df_numeric.notnull().sum(axis=1) >= 3
+            
             blocks = []
             cur_b = []
-            for r in range(len(df_survey_raw)):
-                non_nulls = df_survey_raw.iloc[r].dropna()
-                if len(non_nulls) > 0:
-                    numeric_vals = [x for x in non_nulls if isinstance(x, (int, float))]
-                    if len(numeric_vals) > 0:
-                        cur_b.append(r)
-                    else:
-                        if cur_b: blocks.append(cur_b); cur_b = []
+            for r, is_num in enumerate(numeric_row_mask):
+                if is_num:
+                    cur_b.append(r)
                 else:
                     if cur_b: blocks.append(cur_b); cur_b = []
             if cur_b: blocks.append(cur_b)
 
-            unique_map_plates = map_df['Plate_1536'].unique().tolist()
+            unique_map_plates = map_df['Plate_1536'].unique().tolist() if 'Plate_1536' in map_df.columns else []
             survey_recs = []
 
             for p_idx, b in enumerate(blocks):
                 plt_name = unique_map_plates[p_idx] if p_idx < len(unique_map_plates) else f"Plate_{p_idx+1}"
                 
-                col0_numeric_count = len([x for x in df_survey_raw.iloc[b, 0].dropna() if isinstance(x, (int, float))])
-                start_col = 0 if col0_numeric_count >= 10 else 1
+                # Check column 0 vs column 1 for numeric values in this block
+                col0_valid = df_numeric.iloc[b, 0].notnull().sum()
+                start_col = 0 if col0_valid >= 10 else 1
 
                 for r_i, r_idx in enumerate(b):
                     if r_i >= len(row_letters): break
                     row_let = row_letters[r_i]
                     
-                    for col_idx in range(start_col, df_survey_raw.shape[1]):
-                        v_val = df_survey_raw.iloc[r_idx, col_idx]
-                        if pd.notna(v_val) and isinstance(v_val, (int, float)):
+                    for col_idx in range(start_col, df_numeric.shape[1]):
+                        val = df_numeric.iloc[r_idx, col_idx]
+                        if pd.notna(val):
                             well_col = (col_idx - start_col) + 1
                             if well_col <= 48:
                                 survey_recs.append({
                                     'Plate_1536': plt_name,
                                     'Well_1536': f"{row_let}{well_col:02d}",
-                                    'Measured_Volume_uL': float(v_val)
+                                    'Measured_Volume_uL': float(val)
                                 })
 
-            survey_df = pd.DataFrame(survey_recs)
-            merged_pre = pd.merge(map_df, survey_df, on=['Plate_1536', 'Well_1536'], how='left')
+            # Explicitly initialize columns so DataFrame is never column-less
+            survey_df = pd.DataFrame(survey_recs, columns=['Plate_1536', 'Well_1536', 'Measured_Volume_uL'])
+            
+            if not survey_df.empty and 'Plate_1536' in map_df.columns and 'Well_1536' in map_df.columns:
+                merged_pre = pd.merge(map_df, survey_df, on=['Plate_1536', 'Well_1536'], how='left')
+            else:
+                merged_pre = map_df.copy()
+                if 'Measured_Volume_uL' not in merged_pre.columns:
+                    merged_pre['Measured_Volume_uL'] = 0.0
 
             clean_wells = merged_pre[merged_pre['Measured_Volume_uL'] >= vol_cutoff].copy()
             depleted_wells = merged_pre[merged_pre['Measured_Volume_uL'] < vol_cutoff].copy()
@@ -936,7 +945,6 @@ with tab4:
                 p_col1, p_col2 = st.columns(2)
                 
                 with p_col1:
-                    # Combined Master Backflush Picklist (All 384 Wells)
                     master_bf = reconciled_df[['Source_Plate_384', 'Source_Well_384', 'DMSO_Backflush_Volume_nL']].drop_duplicates().reset_index(drop=True)
                     master_bf.columns = ['Destination Plate Name', 'Destination Well', 'Transfer Volume']
                     master_bf['Source Plate Name'] = 'DMSO_SOURCE'
@@ -948,7 +956,6 @@ with tab4:
                     st.download_button("⬇️ Master DMSO Back-flush Picklist (All Wells)", buf_mbf.getvalue(), "reconciled_master_dmso_backflush_picklist.csv", "text/csv", type="primary", use_container_width=True)
 
                 with p_col2:
-                    # Exception Top-Up Picklist Only
                     topup_rows = []
                     for dw, f_cnt in failed_counts_by_well.items():
                         delta_nl = f_cnt * aliquot_vol_nl_recon
