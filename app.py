@@ -49,7 +49,7 @@ def generate_dual_interactive_html(df, target_pool_max):
             'mz': float(row['Target_m_z']),
             'smiles': str(row['SMILES']) if pd.notna(row['SMILES']) else "",
             'img': svg_text,
-            'mode': row['Ionization_Mode'] if 'Ionization_Mode' in row and pd.notna(row['Ionization_Mode']) else 'positive',
+            'mode': str(row['Ionization_Mode']).lower() if 'Ionization_Mode' in row and pd.notna(row['Ionization_Mode']) else 'positive',
             'backflush': int(row['DMSO_Backflush_Volume_nL']),
             'actual_count': int(row['Compounds_In_Pool']),
             'target_count': int(target_pool_max)
@@ -639,7 +639,7 @@ with tab1:
 
                 src_excel_cols = [
                     'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
-                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'Echo_Transfer_Volume_nL', 'SMILES'
+                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'Echo_Transfer_Volume_nL', 'Ionization_Mode', 'SMILES'
                 ]
                 buf_src = io.BytesIO()
                 with pd.ExcelWriter(buf_src, engine='openpyxl') as writer:
@@ -844,7 +844,7 @@ with tab3:
             st.error(f"Error parsing survey file: {ex}")
 
 # ==========================================
-# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER
+# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER (SMART IONIZATION MODE RECONSTRUCTION)
 # ==========================================
 with tab4:
     st.subheader("⚡ Post-Run Echo Exception Reconciler & Asset Generator")
@@ -935,7 +935,15 @@ with tab4:
                 if 'Assay_Total_Volume_µL' not in reconciled_df.columns: reconciled_df['Assay_Total_Volume_µL'] = 50.0
                 if 'Assay_Target_Conc_µM' not in reconciled_df.columns: reconciled_df['Assay_Target_Conc_µM'] = 10.0
                 if 'SMILES' not in reconciled_df.columns: reconciled_df['SMILES'] = ""
-                if 'Ionization_Mode' not in reconciled_df.columns: reconciled_df['Ionization_Mode'] = 'positive'
+                
+                # RECOVERY STEP 3: Smart Ionization Mode Reconstruction (from m/z delta)
+                if 'Ionization_Mode' not in reconciled_df.columns or reconciled_df['Ionization_Mode'].isna().all() or (reconciled_df['Ionization_Mode'] == 'positive').all():
+                    if 'Target_m_z' in reconciled_df.columns and 'Exact_Mass' in reconciled_df.columns:
+                        reconciled_df['Ionization_Mode'] = reconciled_df.apply(
+                            lambda r: 'positive' if (r['Target_m_z'] - r['Exact_Mass']) > 0 else 'negative', axis=1
+                        )
+                    else:
+                        reconciled_df['Ionization_Mode'] = 'positive'
 
                 # Recalculate pool sizes and fluidics
                 target_total_nl = target_vol_ul_recon * 1000.0
@@ -997,7 +1005,7 @@ with tab4:
 
                 src_excel_cols = [
                     'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
-                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'Echo_Transfer_Volume_nL', 'SMILES'
+                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'Echo_Transfer_Volume_nL', 'Ionization_Mode', 'SMILES'
                 ]
                 valid_src_cols = [c for c in src_excel_cols if c in reconciled_df.columns]
                 buf_rsrc = io.BytesIO()
