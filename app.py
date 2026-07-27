@@ -15,11 +15,284 @@ st.title("NCATS ASMS Compound Pooling & Quality Control Suite")
 
 # Top Navigation Tabs
 tab1, tab2, tab3, tab4 = st.tabs([
-    "1. Pooling Engine", 
-    "2. Map Unpivoter", 
-    "3. Survey Pre-Filter", 
-    "4. Post-Run Reconciler"
+    "⚜ 1. Pooling Engine", 
+    "🧪 2. Map Unpivoter", 
+    "📊 3. Survey Pre-Filter", 
+    "⚡ 4. Post-Run Reconciler"
 ])
+
+def generate_dual_interactive_html(df, target_pool_max):
+    source_dict = {}
+    assay_dict = {}
+    
+    for _, row in df.iterrows():
+        src_plt = row['Source_Plate_384']
+        src_well = row['Source_Well_384']
+        asy_plt = row['Assay_Plate_96']
+        asy_well = row['Assay_Well_96']
+        
+        svg_text = ""
+        try:
+            mol = Chem.MolFromSmiles(row['SMILES'])
+            if mol:
+                drawer = rdMolDraw2D.MolDraw2DSVG(160, 160)
+                clean_mol = rdMolDraw2D.PrepareMolForDrawing(mol)
+                drawer.DrawMolecule(clean_mol)
+                drawer.FinishDrawing()
+                svg_text = drawer.GetDrawingText()
+        except:
+            svg_text = ""
+            
+        comp_card = {
+            'id': row['NCGC_ID'],
+            'mass': float(row['Exact_Mass']),
+            'mz': float(row['Target_m_z']),
+            'smiles': row['SMILES'],
+            'img': svg_text,
+            'mode': row['Ionization_Mode'] if 'Ionization_Mode' in row else 'positive',
+            'backflush': int(row['DMSO_Backflush_Volume_nL']),
+            'actual_count': int(row['Compounds_In_Pool']),
+            'target_count': int(target_pool_max)
+        }
+        
+        if src_plt not in source_dict: source_dict[src_plt] = {}
+        if src_well not in source_dict[src_plt]: source_dict[src_plt][src_well] = []
+        source_dict[src_plt][src_well].append(comp_card)
+        
+        if asy_plt not in assay_dict: assay_dict[asy_plt] = {}
+        if asy_well not in assay_dict[asy_plt]: assay_dict[asy_plt][asy_well] = []
+        assay_dict[asy_plt][asy_well].append(comp_card)
+        
+    full_payload = json.dumps({'source': source_dict, 'assay': assay_dict})
+    
+    html_template = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>NCATS Dual-Plate Assay Navigator</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 20px; color: #333; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e9ecef; padding-bottom: 15px; margin-bottom: 20px; gap: 15px; flex-wrap: wrap; }
+        .controls { display: flex; gap: 12px; align-items: center; }
+        h1 { margin: 0; font-size: 22px; color: #1e293b; }
+        select, button { padding: 8px 16px; font-size: 14px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; font-weight: 500; }
+        button.active-btn { background-color: #2563eb; color: white; border-color: #2563eb; }
+        
+        .wrapper-nav { display: flex; align-items: center; gap: 0px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0px; overflow: hidden; }
+        .wrapper-nav select { border: none; border-radius: 0; padding: 8px 12px; background: transparent; outline: none; }
+        .btn-arrow { border: none; background: transparent; padding: 8px 12px; font-size: 11px; color: #64748b; transition: all 0.1s ease; border-radius: 0; }
+        .btn-arrow:hover { background-color: #f1f5f9; color: #1e293b; }
+        .btn-arrow:first-child { border-right: 1px solid #e2e8f0; }
+        .btn-arrow:last-child { border-left: 1px solid #e2e8f0; }
+        
+        .main-container { display: flex; gap: 24px; align-items: flex-start; }
+        .plate-box { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        .map-legend { display: flex; gap: 24px; margin-bottom: 20px; font-size: 13px; font-weight: 600; justify-content: center; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        
+        .grid-container { display: grid; gap: 4px; align-items: center; justify-items: center; }
+        .grid-384 { grid-template-columns: 30px repeat(24, 26px); }
+        .grid-96 { grid-template-columns: 30px repeat(12, 40px); }
+        
+        .col-header { font-size: 11px; font-weight: bold; color: #64748b; text-align: center; }
+        .row-header { font-size: 11px; font-weight: bold; color: #64748b; text-align: center; display: flex; align-items: center; justify-content: center; }
+        
+        .well { border-radius: 50%; background-color: #f1f5f9; border: 1px solid #cbd5e1; cursor: pointer; transition: all 0.15s ease; box-sizing: border-box; }
+        .well-384 { width: 22px; height: 22px; }
+        .well-96 { width: 34px; height: 34px; }
+        
+        .well.populated.positive { background-color: #bfdbfe; border-color: #3b82f6; }
+        .well.populated.negative { background-color: #fecdd3; border-color: #f43f5e; }
+        .well.backflush-needed { border-style: dashed !important; border-width: 2px !important; }
+        .well.incomplete-pool { border-style: dashed !important; border-width: 2px !important; border-color: #ea580c !important; }
+        .well:hover { transform: scale(1.15); border-color: #475569 !important; box-shadow: 0 0 4px rgba(0,0,0,0.15); z-index: 10; }
+        .well.active-well { border-color: #1e3a8a !important; background-color: #eff6ff !important; box-shadow: 0 0 0 3px #3b82f6; }
+        
+        .display-panel { flex: 1; min-width: 400px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; max-height: 85vh; overflow-y: auto; }
+        .panel-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+        .backflush-tag { font-size: 12px; font-weight: bold; color: #b45309; background-color: #fef3c7; padding: 4px 10px; border-radius: 6px; border: 1px solid #fde68a; }
+        .warning-tag { font-size: 12px; font-weight: bold; color: #dc2626; background-color: #fef2f2; padding: 4px 10px; border-radius: 6px; border: 1px solid #fca5a5; }
+        
+        .compound-card { display: flex; align-items: center; gap: 15px; padding: 12px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+        .compound-info { flex: 1; font-size: 13px; }
+        .compound-id { font-size: 15px; font-weight: bold; color: #2563eb; margin-bottom: 4px; }
+        .struct-img { width: 130px; height: 130px; background: white; border: 1px solid #e2e8f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        .struct-img svg { max-width: 100%; max-height: 100%; }
+        .placeholder-text { color: #94a3b8; font-style: italic; text-align: center; margin-top: 50px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>ASMS Project Interactive Navigator</h1>
+        <div class="controls">
+            <button id="btn384" class="active-btn" onclick="setViewType('source')">384-Well Source Plates</button>
+            <button id="btn96" onclick="setViewType('assay')">96-Well Assay Plates</button>
+            
+            <div class="wrapper-nav">
+                <button class="btn-arrow" onclick="pagePlates(-1)" title="Previous Plate">◀</button>
+                <select id="plateSelect" onchange="renderPlate()"></select>
+                <button class="btn-arrow" onclick="pagePlates(1)" title="Next Plate">▶</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="plate-box">
+            <div id="legendBox" class="map-legend"></div>
+            <div id="gridContainer" class="grid-container"></div>
+        </div>
+        <div class="display-panel">
+            <div id="panelTitle" class="panel-title">Well Pool Inspector</div>
+            <div id="compoundsContainer">
+                <div class="placeholder-text">Click any populated well on the left layout grid to inspect its contents...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const masterDataset = {js_data_payload};
+        let currentViewMode = 'source'; 
+        
+        const rows384 = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P'];
+        const rows96 = ['A','B','C','D','E','F','G','H'];
+        
+        function setViewType(mode) {
+            currentViewMode = mode;
+            document.getElementById('btn384').classList.toggle('active-btn', mode === 'source');
+            document.getElementById('btn96').classList.toggle('active-btn', mode === 'assay');
+            
+            const select = document.getElementById('plateSelect');
+            select.innerHTML = '';
+            const targetedSubTree = masterDataset[currentViewMode];
+            
+            Object.keys(targetedSubTree).sort().forEach(plt => {
+                let opt = document.createElement('option');
+                opt.value = plt; opt.innerHTML = plt; select.appendChild(opt);
+            });
+            
+            renderLegend();
+            renderPlate();
+        }
+
+        function pagePlates(direction) {
+            const select = document.getElementById('plateSelect');
+            const proposedIndex = select.selectedIndex + direction;
+            if (proposedIndex >= 0 && proposedIndex < select.options.length) {
+                select.selectedIndex = proposedIndex;
+                renderPlate();
+            }
+        }
+
+        function renderLegend() {
+            const legend = document.getElementById('legendBox');
+            if (currentViewMode === 'source') {
+                legend.innerHTML = `
+                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#fecdd3; border:1px solid #f43f5e;"></div><span>Negative Pools</span></div>
+                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#bfdbfe; border:1px solid #3b82f6;"></div><span>Positive Pools</span></div>
+                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#f1f5f9; border:2px dashed #475569;"></div><span>Dashed Border = Requires DMSO Back-flush</span></div>
+                `;
+            } else {
+                legend.innerHTML = `
+                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#fecdd3; border:1px solid #f43f5e;"></div><span>Negative Assay Well Block</span></div>
+                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#bfdbfe; border:1px solid #3b82f6;"></div><span>Positive Assay Well Block</span></div>
+                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#f1f5f9; border:2px dashed #ea580c;"></div><span>Orange Dashed Border = Incomplete Pool (Fewer Peaks)</span></div>
+                `;
+            }
+        }
+
+        function renderPlate() {
+            const select = document.getElementById('plateSelect');
+            const currentPlate = select.value;
+            const container = document.getElementById('gridContainer');
+            container.innerHTML = '';
+            
+            if(!currentPlate) return;
+            
+            const is384 = currentViewMode === 'source';
+            container.className = is384 ? "grid-container grid-384" : "grid-container grid-96";
+            
+            let spacer = document.createElement('div'); container.appendChild(spacer);
+            
+            const numCols = is384 ? 24 : 12;
+            const targetRows = is384 ? rows384 : rows96;
+            
+            for(let c=1; c<=numCols; c++) {
+                let header = document.createElement('div'); header.className = 'col-header';
+                header.innerHTML = c < 10 ? '0'+c : c; container.appendChild(header);
+            }
+            
+            targetRows.forEach(r => {
+                let rHeader = document.createElement('div'); rHeader.className = 'row-header';
+                rHeader.innerHTML = r; container.appendChild(rHeader);
+                
+                for(let c=1; c<=numCols; c++) {
+                    let wellName = r + (c < 10 ? '0'+c : c);
+                    let wellDiv = document.createElement('div');
+                    wellDiv.className = is384 ? 'well well-384' : 'well well-96';
+                    wellDiv.id = wellName;
+                    
+                    const dynamicData = masterDataset[currentViewMode][currentPlate] && masterDataset[currentViewMode][currentPlate][wellName];
+                    if (dynamicData && dynamicData.length > 0) {
+                        wellDiv.classList.add('populated');
+                        const wellMode = dynamicData[0].mode;
+                        wellDiv.classList.add(wellMode);
+                        
+                        if (is384 && dynamicData[0].backflush > 0) {
+                            wellDiv.classList.add('backflush-needed');
+                        }
+                        if (!is384 && dynamicData[0].actual_count < dynamicData[0].target_count) {
+                            wellDiv.classList.add('incomplete-pool');
+                        }
+                        wellDiv.onclick = () => selectWell(wellName, dynamicData, wellDiv);
+                    }
+                    container.appendChild(wellDiv);
+                }
+            });
+        }
+
+        function selectWell(wellName, compounds, element) {
+            document.querySelectorAll('.well').forEach(w => w.classList.remove('active-well'));
+            element.classList.add('active-well');
+            
+            const wellModeLabel = compounds[0].mode.toUpperCase();
+            const plateContextLabel = currentViewMode === 'source' ? 'Source Well' : 'Assay Well';
+            
+            let headerHTML = `<span>Contents of ${plateContextLabel}: ${wellName} (${wellModeLabel} Mode)</span>`;
+            if(currentViewMode === 'source' && compounds[0].backflush > 0) {
+                headerHTML += `<span class="backflush-tag">⚠️ DMSO Back-flush: +${compounds[0].backflush} nL</span>`;
+            }
+            if(currentViewMode === 'assay' && compounds[0].actual_count < compounds[0].target_count) {
+                headerHTML += `<span class="warning-tag">⚠️ Incomplete Pool: ${compounds[0].actual_count}/${compounds[0].target_count} Compounds</span>`;
+            }
+            document.getElementById('panelTitle').innerHTML = headerHTML;
+            
+            const listContainer = document.getElementById('compoundsContainer');
+            listContainer.innerHTML = '';
+            
+            compounds.forEach(c => {
+                let card = document.createElement('div'); card.className = 'compound-card';
+                card.innerHTML = `
+                    <div style="flex:1;">
+                        <div style="font-size:15px; font-weight:bold; color:#2563eb; margin-bottom:4px;">${c.id}</div>
+                        <div><strong>Exact Mass:</strong> ${c.mass.toFixed(4)} Da</div>
+                        <div><strong>Target M/Z:</strong> ${c.mz.toFixed(4)}</div>
+                        <div style="margin-top:5px; color:#64748b; font-size:11px; word-break:break-all;"><strong>SMILES:</strong> ${c.smiles}</div>
+                    </div>
+                    <div style="width:130px; height:130px; background:white; border:1px solid #e2e8f0; border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+                        ${c.img ? c.img : ''}
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+
+        setViewType('source');
+    </script>
+</body>
+</html>
+"""
+    return html_template.replace("{js_data_payload}", full_payload)
 
 # ==========================================
 # TAB 1: MAIN POOLING ENGINE
@@ -224,290 +497,17 @@ with tab1:
                     
         return pd.DataFrame(pooled_records)
 
-    def generate_dual_interactive_html(df, target_pool_max):
-        source_dict = {}
-        assay_dict = {}
-        
-        for _, row in df.iterrows():
-            src_plt = row['Source_Plate_384']
-            src_well = row['Source_Well_384']
-            asy_plt = row['Assay_Plate_96']
-            asy_well = row['Assay_Well_96']
-            
-            svg_text = ""
-            try:
-                mol = Chem.MolFromSmiles(row['SMILES'])
-                if mol:
-                    drawer = rdMolDraw2D.MolDraw2DSVG(160, 160)
-                    clean_mol = rdMolDraw2D.PrepareMolForDrawing(mol)
-                    drawer.DrawMolecule(clean_mol)
-                    drawer.FinishDrawing()
-                    svg_text = drawer.GetDrawingText()
-            except:
-                svg_text = ""
-                
-            comp_card = {
-                'id': row['NCGC_ID'],
-                'mass': row['Exact_Mass'],
-                'mz': row['Target_m_z'],
-                'smiles': row['SMILES'],
-                'img': svg_text,
-                'mode': row['Ionization_Mode'],
-                'backflush': int(row['DMSO_Backflush_Volume_nL']),
-                'actual_count': int(row['Compounds_In_Pool']),
-                'target_count': int(target_pool_max)
-            }
-            
-            if src_plt not in source_dict: source_dict[src_plt] = {}
-            if src_well not in source_dict[src_plt]: source_dict[src_plt][src_well] = []
-            source_dict[src_plt][src_well].append(comp_card)
-            
-            if asy_plt not in assay_dict: assay_dict[asy_plt] = {}
-            if asy_well not in assay_dict[asy_plt]: assay_dict[asy_plt][asy_well] = []
-            assay_dict[asy_plt][asy_well].append(comp_card)
-            
-        full_payload = json.dumps({'source': source_dict, 'assay': assay_dict})
-        
-        html_template = """<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>NCATS Dual-Plate Assay Navigator</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 20px; color: #333; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e9ecef; padding-bottom: 15px; margin-bottom: 20px; gap: 15px; flex-wrap: wrap; }
-        .controls { display: flex; gap: 12px; align-items: center; }
-        h1 { margin: 0; font-size: 22px; color: #1e293b; }
-        select, button { padding: 8px 16px; font-size: 14px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; font-weight: 500; }
-        button.active-btn { background-color: #2563eb; color: white; border-color: #2563eb; }
-        
-        .wrapper-nav { display: flex; align-items: center; gap: 0px; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0px; overflow: hidden; }
-        .wrapper-nav select { border: none; border-radius: 0; padding: 8px 12px; background: transparent; outline: none; }
-        .btn-arrow { border: none; background: transparent; padding: 8px 12px; font-size: 11px; color: #64748b; transition: all 0.1s ease; border-radius: 0; }
-        .btn-arrow:hover { background-color: #f1f5f9; color: #1e293b; }
-        .btn-arrow:first-child { border-right: 1px solid #e2e8f0; }
-        .btn-arrow:last-child { border-left: 1px solid #e2e8f0; }
-        
-        .main-container { display: flex; gap: 24px; align-items: flex-start; }
-        .plate-box { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
-        .map-legend { display: flex; gap: 24px; margin-bottom: 20px; font-size: 13px; font-weight: 600; justify-content: center; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; flex-wrap: wrap; }
-        .legend-item { display: flex; align-items: center; gap: 8px; }
-        
-        .grid-container { display: grid; gap: 4px; align-items: center; justify-items: center; }
-        .grid-384 { grid-template-columns: 30px repeat(24, 26px); }
-        .grid-96 { grid-template-columns: 30px repeat(12, 40px); }
-        
-        .col-header { font-size: 11px; font-weight: bold; color: #64748b; text-align: center; }
-        .row-header { font-size: 11px; font-weight: bold; color: #64748b; text-align: center; display: flex; align-items: center; justify-content: center; }
-        
-        .well { border-radius: 50%; background-color: #f1f5f9; border: 1px solid #cbd5e1; cursor: pointer; transition: all 0.15s ease; box-sizing: border-box; }
-        .well-384 { width: 22px; height: 22px; }
-        .well-96 { width: 34px; height: 34px; }
-        
-        .well.populated.positive { background-color: #bfdbfe; border-color: #3b82f6; }
-        .well.populated.negative { background-color: #fecdd3; border-color: #f43f5e; }
-        .well.backflush-needed { border-style: dashed !important; border-width: 2px !important; }
-        .well.incomplete-pool { border-style: dashed !important; border-width: 2px !important; border-color: #ea580c !important; }
-        .well:hover { transform: scale(1.15); border-color: #475569 !important; box-shadow: 0 0 4px rgba(0,0,0,0.15); z-index: 10; }
-        .well.active-well { border-color: #1e3a8a !important; background-color: #eff6ff !important; box-shadow: 0 0 0 3px #3b82f6; }
-        
-        .display-panel { flex: 1; min-width: 400px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; max-height: 85vh; overflow-y: auto; }
-        .panel-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-        .backflush-tag { font-size: 12px; font-weight: bold; color: #b45309; background-color: #fef3c7; padding: 4px 10px; border-radius: 6px; border: 1px solid #fde68a; }
-        .warning-tag { font-size: 12px; font-weight: bold; color: #dc2626; background-color: #fef2f2; padding: 4px 10px; border-radius: 6px; border: 1px solid #fca5a5; }
-        
-        .compound-card { display: flex; align-items: center; gap: 15px; padding: 12px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
-        .compound-info { flex: 1; font-size: 13px; }
-        .compound-id { font-size: 15px; font-weight: bold; color: #2563eb; margin-bottom: 4px; }
-        .struct-img { width: 130px; height: 130px; background: white; border: 1px solid #e2e8f0; border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        .struct-img svg { max-width: 100%; max-height: 100%; }
-        .placeholder-text { color: #94a3b8; font-style: italic; text-align: center; margin-top: 50px; }
-    </style>
-</head>
-<body>
-
-    <div class="header">
-        <h1>ASMS Project Interactive Navigator</h1>
-        <div class="controls">
-            <button id="btn384" class="active-btn" onclick="setViewType('source')">384-Well Source Plates</button>
-            <button id="btn96" onclick="setViewType('assay')">96-Well Assay Plates</button>
-            
-            <div class="wrapper-nav">
-                <button class="btn-arrow" onclick="pagePlates(-1)" title="Previous Plate">◀</button>
-                <select id="plateSelect" onchange="renderPlate()"></select>
-                <button class="btn-arrow" onclick="pagePlates(1)" title="Next Plate">▶</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="main-container">
-        <div class="plate-box">
-            <div id="legendBox" class="map-legend"></div>
-            <div id="gridContainer" class="grid-container"></div>
-        </div>
-        <div class="display-panel">
-            <div id="panelTitle" class="panel-title">Well Pool Inspector</div>
-            <div id="compoundsContainer">
-                <div class="placeholder-text">Click any populated well on the left layout grid to inspect its contents...</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const masterDataset = {js_data_payload};
-        let currentViewMode = 'source'; 
-        
-        const rows384 = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P'];
-        const rows96 = ['A','B','C','D','E','F','G','H'];
-        
-        function setViewType(mode) {
-            currentViewMode = mode;
-            document.getElementById('btn384').classList.toggle('active-btn', mode === 'source');
-            document.getElementById('btn96').classList.toggle('active-btn', mode === 'assay');
-            
-            const select = document.getElementById('plateSelect');
-            select.innerHTML = '';
-            const targetedSubTree = masterDataset[currentViewMode];
-            
-            Object.keys(targetedSubTree).sort().forEach(plt => {
-                let opt = document.createElement('option');
-                opt.value = plt; opt.innerHTML = plt; select.appendChild(opt);
-            });
-            
-            renderLegend();
-            renderPlate();
-        }
-
-        function pagePlates(direction) {
-            const select = document.getElementById('plateSelect');
-            const proposedIndex = select.selectedIndex + direction;
-            if (proposedIndex >= 0 && proposedIndex < select.options.length) {
-                select.selectedIndex = proposedIndex;
-                renderPlate();
-            }
-        }
-
-        function renderLegend() {
-            const legend = document.getElementById('legendBox');
-            if (currentViewMode === 'source') {
-                legend.innerHTML = `
-                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#fecdd3; border:1px solid #f43f5e;"></div><span>Negative Pools</span></div>
-                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#bfdbfe; border:1px solid #3b82f6;"></div><span>Positive Pools</span></div>
-                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#f1f5f9; border:2px dashed #475569;"></div><span>Dashed Border = Requires DMSO Back-flush</span></div>
-                `;
-            } else {
-                legend.innerHTML = `
-                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#fecdd3; border:1px solid #f43f5e;"></div><span>Negative Assay Well Block</span></div>
-                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#bfdbfe; border:1px solid #3b82f6;"></div><span>Positive Assay Well Block</span></div>
-                    <div class="legend-item"><div style="width:14px; height:14px; border-radius:50%; background-color:#f1f5f9; border:2px dashed #ea580c;"></div><span>Orange Dashed Border = Incomplete Pool (Fewer Peaks)</span></div>
-                `;
-            }
-        }
-
-        function renderPlate() {
-            const select = document.getElementById('plateSelect');
-            const currentPlate = select.value;
-            const container = document.getElementById('gridContainer');
-            container.innerHTML = '';
-            
-            if(!currentPlate) return;
-            
-            const is384 = currentViewMode === 'source';
-            container.className = is384 ? "grid-container grid-384" : "grid-container grid-96";
-            
-            let spacer = document.createElement('div'); container.appendChild(spacer);
-            
-            const numCols = is384 ? 24 : 12;
-            const targetRows = is384 ? rows384 : rows96;
-            
-            for(let c=1; c<=numCols; c++) {
-                let header = document.createElement('div'); header.className = 'col-header';
-                header.innerHTML = c < 10 ? '0'+c : c; container.appendChild(header);
-            }
-            
-            targetRows.forEach(r => {
-                let rHeader = document.createElement('div'); rHeader.className = 'row-header';
-                rHeader.innerHTML = r; container.appendChild(rHeader);
-                
-                for(let c=1; c<=numCols; c++) {
-                    let wellName = r + (c < 10 ? '0'+c : c);
-                    let wellDiv = document.createElement('div');
-                    wellDiv.className = is384 ? 'well well-384' : 'well well-96';
-                    wellDiv.id = wellName;
-                    
-                    const dynamicData = masterDataset[currentViewMode][currentPlate] && masterDataset[currentViewMode][currentPlate][wellName];
-                    if (dynamicData && dynamicData.length > 0) {
-                        wellDiv.classList.add('populated');
-                        const wellMode = dynamicData[0].mode;
-                        wellDiv.classList.add(wellMode);
-                        
-                        if (is384 && dynamicData[0].backflush > 0) {
-                            wellDiv.classList.add('backflush-needed');
-                        }
-                        if (!is384 && dynamicData[0].actual_count < dynamicData[0].target_count) {
-                            wellDiv.classList.add('incomplete-pool');
-                        }
-                        wellDiv.onclick = () => selectWell(wellName, dynamicData, wellDiv);
-                    }
-                    container.appendChild(wellDiv);
-                }
-            });
-        }
-
-        function selectWell(wellName, compounds, element) {
-            document.querySelectorAll('.well').forEach(w => w.classList.remove('active-well'));
-            element.classList.add('active-well');
-            
-            const wellModeLabel = compounds[0].mode.toUpperCase();
-            const plateContextLabel = currentViewMode === 'source' ? 'Source Well' : 'Assay Well';
-            
-            let headerHTML = `<span>Contents of ${plateContextLabel}: ${wellName} (${wellModeLabel} Mode)</span>`;
-            if(currentViewMode === 'source' && compounds[0].backflush > 0) {
-                headerHTML += `<span class="backflush-tag">DMSO Back-flush: +${compounds[0].backflush} nL</span>`;
-            }
-            if(currentViewMode === 'assay' && compounds[0].actual_count < compounds[0].target_count) {
-                headerHTML += `<span class="warning-tag">Incomplete Pool: ${compounds[0].actual_count}/${compounds[0].target_count} Compounds</span>`;
-            }
-            document.getElementById('panelTitle').innerHTML = headerHTML;
-            
-            const listContainer = document.getElementById('compoundsContainer');
-            listContainer.innerHTML = '';
-            
-            compounds.forEach(c => {
-                let card = document.createElement('div'); card.className = 'compound-card';
-                card.innerHTML = `
-                    <div style="flex:1;">
-                        <div style="font-size:15px; font-weight:bold; color:#2563eb; margin-bottom:4px;">${c.id}</div>
-                        <div><strong>Exact Mass:</strong> ${c.mass.toFixed(4)} Da</div>
-                        <div><strong>Target M/Z:</strong> ${c.mz.toFixed(4)}</div>
-                        <div style="margin-top:5px; color:#64748b; font-size:11px; word-break:break-all;"><strong>SMILES:</strong> ${c.smiles}</div>
-                    </div>
-                    <div style="width:130px; height:130px; background:white; border:1px solid #e2e8f0; border-radius:6px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
-                        ${c.img ? c.img : ''}
-                    </div>
-                `;
-                listContainer.appendChild(card);
-            });
-        }
-
-        setViewType('source');
-    </script>
-</body>
-</html>
-"""
-        return html_template.replace("{js_data_payload}", full_payload)
-
     # Main Pipeline Execution
     if uploaded_file is not None:
         if not plate_prefix.strip():
-            st.error("**Missing Required Field:** Enter a unique Plate Name Prefix above before running calculations.")
+            st.error("⚠️ **Missing Required Field:** Enter a unique Plate Name Prefix above before running calculations.")
             st.stop()
 
         max_possible_compound_vol_nl = pool_size * vol_per_comp
         target_source_vol_nl = target_source_vol_ul * 1000.0
         
         if max_possible_compound_vol_nl > target_source_vol_nl:
-            st.error(f"**Physical Fluidic Paradox Error:** You requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires **{max_possible_compound_vol_nl / 1000.0} µL** per well from library aliquots alone, physically overflowing your target source well capacity of **{target_source_vol_ul} µL**.")
+            st.error(f"❌ **Physical Fluidic Paradox Error:** You requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires **{max_possible_compound_vol_nl / 1000.0} µL** per well from library aliquots alone, physically overflowing your target source well capacity of **{target_source_vol_ul} µL**.")
             st.stop()
 
         with st.spinner("Executing double-stage library calculations..."):
@@ -550,7 +550,7 @@ with tab1:
                 source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
                 source_map['Designated_Pool_Size'] = pool_size
                 source_map['Actual_Pool_Size'] = source_map['Compounds_In_Pool']
-                source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
+                source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"⚠️ INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
                 source_map = source_map.sort_values(by=['Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index']).reset_index(drop=True)
                 
                 total_384_wells = len(source_map['Source_Well_384'].unique())
@@ -575,13 +575,10 @@ with tab1:
                 
                 violating_pools = source_map[source_map['Min_Δm/z_In_Well'] < min_mz_threshold]['Source_Well_384'].nunique()
                 if violating_pools > 0:
-                    st.warning(f"Mass Resolution Alert: {violating_pools} well pools contain compounds falling below your preferred {min_mz_threshold} Da Δm/z resolution limit.")
+                    st.warning(f"⚠️ Mass Resolution Alert: {violating_pools} well pools contain compounds falling below your preferred {min_mz_threshold} Da Δm/z resolution limit.")
                 else:
-                    st.info(f"Mass Resolution Checked: All pooling mixtures maintain structural Δm/z separation limits above {min_mz_threshold} Da.")
+                    st.info(f"✅ Mass Resolution Checked: All pooling mixtures maintain structural Δm/z separation limits above {min_mz_threshold} Da.")
                     
-                # ==========================================
-                # 5. Multi-Deliverable Export Hub
-                # ==========================================
                 st.markdown("### Download Campaign Assets")
                 
                 if uploaded_inventory is not None:
@@ -614,7 +611,6 @@ with tab1:
                                 
                                 picklist_1536_to_384 = picklist_1536_to_384.drop_duplicates().reset_index(drop=True)
                                 
-                                # SORT BY SOURCE PLATE FIRST TO ELIMINATE PLATE SWAPS
                                 picklist_1536_to_384 = picklist_1536_to_384.sort_values(
                                     by=['Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well']
                                 ).reset_index(drop=True)
@@ -623,7 +619,7 @@ with tab1:
                                 picklist_1536_to_384.to_csv(buf_up, index=False)
                                 csv_up = buf_up.getvalue()
                                 
-                                st.success(f"**1536 ➔ 384 Consolidation Picklist Generated!** Matched {len(consolidation_df)} compound locations.")
+                                st.success(f"✅ **1536 ➔ 384 Consolidation Picklist Generated!** Matched {len(consolidation_df)} compound locations.")
                                 st.download_button(
                                     label="0. Download 1536 ➔ 384 Consolidation Picklist (.csv)",
                                     data=csv_up,
@@ -633,9 +629,9 @@ with tab1:
                                     use_container_width=False
                                 )
                             else:
-                                st.error("**0 Match IDs Identified:** Make sure your 1536 Master Map contains an 'NCGC_ID' column matching the SDF.")
+                                st.error("⚠️ **0 Match IDs Identified:** Make sure your 1536 Master Map contains an 'NCGC_ID' column matching the SDF.")
                         else:
-                            st.error(f"**Missing Required Mapping Columns:** Need 'NCGC_ID', 'Plate_1536', and 'Well_1536' in Master Map. Found columns: {list(inv_df.columns)}")
+                            st.error(f"⚠️ **Missing Required Mapping Columns:** Need 'NCGC_ID', 'Plate_1536', and 'Well_1536' in Master Map. Found columns: {list(inv_df.columns)}")
                     except Exception as ex:
                         st.error(f"Upstream pipeline error: {str(ex)}")
 
@@ -643,7 +639,7 @@ with tab1:
 
                 src_excel_cols = [
                     'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
-                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL'
+                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'SMILES'
                 ]
                 buf_src = io.BytesIO()
                 with pd.ExcelWriter(buf_src, engine='openpyxl') as writer:
@@ -717,7 +713,7 @@ with tab1:
 # TAB 2: PLATE MAP UNPIVOTER (CORRECTED)
 # ==========================================
 with tab2:
-    st.subheader("Visual Plate Map Unpivoter")
+    st.subheader("🧪 Visual Plate Map Unpivoter")
     st.write("Convert 2D visual grid Excel sheets (A–AF rows) into flat CSV manifests.")
 
     uploaded_map_file = st.file_uploader("Upload Excel Plate Map (.xlsx)", type=["xlsx", "xls"], key="unpivoter_uploader")
@@ -746,7 +742,7 @@ with tab2:
             
             buf = io.StringIO()
             flat_df.to_csv(buf, index=False)
-            st.download_button("Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
+            st.download_button("⬇️ Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
@@ -754,7 +750,7 @@ with tab2:
 # TAB 3: ECHO SURVEY VOLUME PRE-FILTER
 # ==========================================
 with tab3:
-    st.subheader("Echo Survey Volume Pre-Filter")
+    st.subheader("📊 Echo Survey Volume Pre-Filter")
     st.write("Cross-reference your 1536 master plate map against an Echo Volume Survey spreadsheet to filter out low-volume wells before running calculations.")
 
     col_s1, col_s2 = st.columns(2)
@@ -830,25 +826,25 @@ with tab3:
 
             buf_clean = io.StringIO()
             clean_wells.to_csv(buf_clean, index=False)
-            st.download_button("Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
+            st.download_button("⬇️ Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
 
             if not depleted_wells.empty:
-                st.subheader("Depleted Compounds Reorder Manifest")
+                st.subheader("⚠️ Depleted Compounds Reorder Manifest")
                 st.dataframe(depleted_wells[['NCGC_ID', 'Plate_1536', 'Well_1536', 'Measured_Volume_uL']], use_container_width=True)
                 
                 buf_dep = io.StringIO()
                 depleted_wells.to_csv(buf_dep, index=False)
-                st.download_button("Download Reorder Manifest (.csv)", buf_dep.getvalue(), "depleted_compounds_reorder_list.csv", "text/csv")
+                st.download_button("⬇️ Download Reorder Manifest (.csv)", buf_dep.getvalue(), "depleted_compounds_reorder_list.csv", "text/csv")
 
         except Exception as ex:
             st.error(f"Error parsing survey file: {ex}")
 
 # ==========================================
-# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER
+# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER (COMPLETE UPDATE ENGINE)
 # ==========================================
 with tab4:
-    st.subheader("Post-Run Echo Exception Reconciler")
-    st.write("Upload an Echo Exception/Transfer Report after a run to automatically calculate corrected DMSO back-flushes and strip skipped compounds from downstream manifests.")
+    st.subheader("⚡ Post-Run Echo Exception Reconciler & Asset Generator")
+    st.write("Upload an Echo Exception/Transfer Report alongside your Source Prep Manifest to recalculate DMSO back-flushes, update campaign manifests, and re-render your interactive HTML map.")
 
     col_r1, col_r2 = st.columns(2)
     with col_r1:
@@ -882,56 +878,161 @@ with tab4:
 
             exc_df.columns = [str(c).strip() for c in exc_df.columns]
             dest_well_col = next((c for c in exc_df.columns if 'DEST' in c.upper() and 'WELL' in c.upper()), None)
+            src_well_col = next((c for c in exc_df.columns if ('SRC' in c.upper() or 'SOURCE' in c.upper()) and 'WELL' in c.upper()), None)
             
             if dest_well_col:
+                orig_df['norm_source_well'] = orig_df['Source_Well_384'].apply(normalize_well)
                 exc_df['norm_dest_well'] = exc_df[dest_well_col].apply(normalize_well)
-                failed_counts = exc_df[exc_df['norm_dest_well'] != ""].groupby('norm_dest_well').size().to_dict()
                 
-                reconciled_rows = []
-                for well_384, group in orig_df.groupby('Source_Well_384'):
-                    norm_well_384 = normalize_well(well_384)
-                    assigned_cnt = len(group)
-                    failed_cnt = failed_counts.get(norm_well_384, 0)
-                    actual_cnt = max(0, assigned_cnt - failed_cnt)
-                    
-                    actual_comp_fluid_nl = actual_cnt * aliquot_vol_nl_recon
-                    target_total_nl = target_vol_ul_recon * 1000.0
-                    corrected_backflush_nl = max(0.0, target_total_nl - actual_comp_fluid_nl)
-                    
-                    reconciled_rows.append({
-                        'Source_Plate_384': group['Source_Plate_384'].iloc[0],
-                        'Source_Well_384': norm_well_384,
-                        'Assigned_Compounds': assigned_cnt,
-                        'Failed_Transfers': failed_cnt,
-                        'Actual_Compounds_Added': actual_cnt,
-                        'Actual_Compound_Fluid_nL': actual_comp_fluid_nl,
-                        'Target_Total_Vol_nL': target_total_nl,
-                        'Corrected_DMSO_Backflush_nL': corrected_backflush_nl
-                    })
-
-                recon_summary_df = pd.DataFrame(reconciled_rows)
-                skewed_wells = recon_summary_df[recon_summary_df['Failed_Transfers'] > 0]
+                # Identify specific failed compound entries
+                failed_transfers = []
+                for idx, row in exc_df.iterrows():
+                    dw = normalize_well(row[dest_well_col])
+                    sid = str(row['Sample ID']).split('-')[0] if 'Sample ID' in row and pd.notna(row['Sample ID']) else None
+                    failed_transfers.append({'dest_well': dw, 'sample_id': sid})
+                
+                failed_counts_by_well = exc_df['norm_dest_well'].value_counts().to_dict()
+                
+                rows_to_drop = []
+                for ft in failed_transfers:
+                    dw = ft['dest_well']
+                    sid = ft['sample_id']
+                    matches = orig_df[orig_df['norm_source_well'] == dw]
+                    if sid:
+                        sid_matches = matches[matches['NCGC_ID'].astype(str).str.contains(sid)]
+                        if not sid_matches.empty:
+                            rows_to_drop.extend(sid_matches.index.tolist())
+                            continue
+                    if not matches.empty:
+                        rows_to_drop.append(matches.index[0])
+                        
+                reconciled_df = orig_df.drop(index=list(set(rows_to_drop))).reset_index(drop=True)
+                
+                # Recalculate pool sizes and fluidics
+                target_total_nl = target_vol_ul_recon * 1000.0
+                pool_counts = reconciled_df.groupby(['Source_Plate_384', 'norm_source_well']).size().reset_index(name='Actual_Pool_Count')
+                
+                reconciled_df = pd.merge(reconciled_df, pool_counts, on=['Source_Plate_384', 'norm_source_well'], how='left')
+                reconciled_df['Compounds_In_Pool'] = reconciled_df['Actual_Pool_Count']
+                reconciled_df['Actual_Pool_Size'] = reconciled_df['Actual_Pool_Count']
+                
+                reconciled_df['Total_Compound_Fluid_nL'] = reconciled_df['Compounds_In_Pool'] * aliquot_vol_nl_recon
+                reconciled_df['DMSO_Backflush_Volume_nL'] = (target_total_nl - reconciled_df['Total_Compound_Fluid_nL']).clip(lower=0.0)
+                reconciled_df['Backflush_Required'] = reconciled_df['DMSO_Backflush_Volume_nL'].apply(lambda x: "YES" if x > 0 else "NO")
+                
+                designated_max = orig_df['Designated_Pool_Size'].iloc[0] if 'Designated_Pool_Size' in orig_df.columns else 10
+                reconciled_df['Pool_Status'] = reconciled_df.apply(
+                    lambda r: "COMPLETE" if r['Actual_Pool_Count'] == designated_max else f"⚠️ INCOMPLETE ({r['Actual_Pool_Count']}/{designated_max})", axis=1
+                )
+                
+                skewed_pools = len(failed_counts_by_well)
 
                 rm1, rm2, rm3 = st.columns(3)
-                rm1.metric("Total 384 Pools Evaluated", len(recon_summary_df))
+                rm1.metric("Total 384 Pools Evaluated", len(reconciled_df['Source_Well_384'].unique()))
                 rm2.metric("Total Failed Echo Transfers", len(exc_df))
-                rm3.metric("384 Wells Requiring Corrected Back-flush", len(skewed_wells))
+                rm3.metric("384 Wells Requiring Corrected Back-flush", skewed_pools)
 
-                st.subheader("Corrected DMSO Back-flush Picklist (For Echo Top-Up Run)")
-                if not skewed_wells.empty:
-                    backflush_picklist = skewed_wells[['Source_Plate_384', 'Source_Well_384', 'Corrected_DMSO_Backflush_nL']].copy()
-                    backflush_picklist.columns = ['Destination Plate Name', 'Destination Well', 'Transfer Volume']
-                    backflush_picklist['Source Plate Name'] = 'DMSO_SOURCE'
-                    backflush_picklist['Source Well'] = 'A01'
-                    backflush_picklist = backflush_picklist[['Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume']]
+                st.markdown("### 1. Download Reconciled Back-flush Picklists")
+                p_col1, p_col2 = st.columns(2)
+                
+                with p_col1:
+                    # Combined Master Backflush Picklist (All 384 Wells)
+                    master_bf = reconciled_df[['Source_Plate_384', 'Source_Well_384', 'DMSO_Backflush_Volume_nL']].drop_duplicates().reset_index(drop=True)
+                    master_bf.columns = ['Destination Plate Name', 'Destination Well', 'Transfer Volume']
+                    master_bf['Source Plate Name'] = 'DMSO_SOURCE'
+                    master_bf['Source Well'] = 'A01'
+                    master_bf = master_bf[['Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume']]
+                    
+                    buf_mbf = io.StringIO()
+                    master_bf.to_csv(buf_mbf, index=False)
+                    st.download_button("⬇️ Master DMSO Back-flush Picklist (All Wells)", buf_mbf.getvalue(), "reconciled_master_dmso_backflush_picklist.csv", "text/csv", type="primary", use_container_width=True)
 
-                    st.dataframe(backflush_picklist, use_container_width=True)
+                with p_col2:
+                    # Exception Top-Up Picklist Only
+                    topup_rows = []
+                    for dw, f_cnt in failed_counts_by_well.items():
+                        delta_nl = f_cnt * aliquot_vol_nl_recon
+                        plt = orig_df[orig_df['norm_source_well'] == dw]['Source_Plate_384'].iloc[0] if not orig_df[orig_df['norm_source_well'] == dw].empty else 'ASMS_NPC_SRC_PLT_1'
+                        topup_rows.append({
+                            'Source Plate Name': 'DMSO_SOURCE',
+                            'Source Well': 'A01',
+                            'Destination Plate Name': plt,
+                            'Destination Well': dw,
+                            'Transfer Volume': delta_nl
+                        })
+                    topup_bf = pd.DataFrame(topup_rows)
+                    buf_tbf = io.StringIO()
+                    topup_bf.to_csv(buf_tbf, index=False)
+                    st.download_button("⬇️ Exception Top-Up Picklist Only (Delta Vol)", buf_tbf.getvalue(), "exception_topup_dmso_picklist.csv", "text/csv", use_container_width=True)
 
-                    buf_bf = io.StringIO()
-                    backflush_picklist.to_csv(buf_bf, index=False)
-                    st.download_button("Download Corrected Back-flush Picklist (.csv)", buf_bf.getvalue(), "corrected_dmso_backflush_picklist.csv", "text/csv", type="primary")
-                else:
-                    st.info("No volume-skewed wells detected across evaluated pools.")
+                st.markdown("### 2. Download Corrected Campaign Deliverables")
+                rc_col1, rc_col2, rc_col3, rc_col4 = st.columns(4)
+
+                src_excel_cols = [
+                    'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
+                    'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'SMILES'
+                ]
+                valid_src_cols = [c for c in src_excel_cols if c in reconciled_df.columns]
+                buf_rsrc = io.BytesIO()
+                with pd.ExcelWriter(buf_rsrc, engine='openpyxl') as writer:
+                    reconciled_df[valid_src_cols].to_excel(writer, sheet_name="384_Source_Prep", index=False)
+                buf_rsrc.seek(0)
+                rc_col1.download_button(
+                    label="1. Reconciled Source Prep Workbook (.xlsx)",
+                    data=buf_rsrc,
+                    file_name="reconciled_source_prep_manifest.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+                
+                asy_excel_cols = [
+                    'Assay_Plate_96', 'Assay_Well_96', 'Pool_Status', 'Designated_Pool_Size', 'Actual_Pool_Size', 
+                    'Source_Plate_384', 'Source_Well_384', 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 
+                    'Assay_Total_Volume_µL', 'Assay_Target_Conc_µM', 'Echo_Transfer_Volume_nL', 'Ionization_Mode'
+                ]
+                valid_asy_cols = [c for c in asy_excel_cols if c in reconciled_df.columns]
+                buf_rasy = io.BytesIO()
+                with pd.ExcelWriter(buf_rasy, engine='openpyxl') as writer:
+                    reconciled_df[valid_asy_cols].to_excel(writer, sheet_name="96_Assay_Run", index=False)
+                buf_rasy.seek(0)
+                rc_col2.download_button(
+                    label="2. Reconciled Assay Run Manifest (.xlsx)",
+                    data=buf_rasy,
+                    file_name="reconciled_assay_run_manifest.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+                
+                html_reconciled_payload = generate_dual_interactive_html(df=reconciled_df, target_pool_max=designated_max)
+                rc_col3.download_button(
+                    label="3. Reconciled Campaign Browser Map (.html)",
+                    data=html_reconciled_payload,
+                    file_name="reconciled_campaign_map.html",
+                    mime="text/html",
+                    use_container_width=True
+                )
+                
+                echo_reconciled_pick = reconciled_df[[
+                    'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Echo_Transfer_Volume_nL'
+                ]].drop_duplicates().reset_index(drop=True)
+                echo_reconciled_pick.columns = ['Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume']
+                
+                buf_rpick = io.StringIO()
+                echo_reconciled_pick.to_csv(buf_rpick, index=False)
+                rc_col4.download_button(
+                    label="4. Reconciled Echo Assay Picklist (.csv)",
+                    data=buf_rpick.getvalue(),
+                    file_name="reconciled_echo_assay_picklist.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+                st.markdown("### Reconciled Data Matrix Preview")
+                st.dataframe(reconciled_df[[c for c in [
+                    'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Backflush_Required',
+                    'Assay_Plate_96', 'Assay_Well_96', 'Pool_Status', 'NCGC_ID', 'Exact_Mass', 'Target_m_z', 
+                    'DMSO_Backflush_Volume_nL', 'Echo_Transfer_Volume_nL'
+                ] if c in reconciled_df.columns]], use_container_width=True)
 
         except Exception as ex_recon:
             st.error(f"Error reconciling report: {ex_recon}")
