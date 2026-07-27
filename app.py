@@ -33,7 +33,7 @@ def generate_dual_interactive_html(df, target_pool_max):
         
         svg_text = ""
         try:
-            mol = Chem.MolFromSmiles(row['SMILES'])
+            mol = Chem.MolFromSmiles(row['SMILES']) if pd.notna(row['SMILES']) else None
             if mol:
                 drawer = rdMolDraw2D.MolDraw2DSVG(160, 160)
                 clean_mol = rdMolDraw2D.PrepareMolForDrawing(mol)
@@ -47,9 +47,9 @@ def generate_dual_interactive_html(df, target_pool_max):
             'id': row['NCGC_ID'],
             'mass': float(row['Exact_Mass']),
             'mz': float(row['Target_m_z']),
-            'smiles': row['SMILES'],
+            'smiles': str(row['SMILES']) if pd.notna(row['SMILES']) else "",
             'img': svg_text,
-            'mode': row['Ionization_Mode'] if 'Ionization_Mode' in row else 'positive',
+            'mode': row['Ionization_Mode'] if 'Ionization_Mode' in row and pd.notna(row['Ionization_Mode']) else 'positive',
             'backflush': int(row['DMSO_Backflush_Volume_nL']),
             'actual_count': int(row['Compounds_In_Pool']),
             'target_count': int(target_pool_max)
@@ -638,7 +638,7 @@ with tab1:
                 down_col1, down_col2, down_col3, down_col4 = st.columns(4)
 
                 src_excel_cols = [
-                    'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
+                    'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
                     'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'SMILES'
                 ]
                 buf_src = io.BytesIO()
@@ -747,7 +747,7 @@ with tab2:
             st.error(f"Error processing file: {e}")
 
 # ==========================================
-# TAB 3: ECHO SURVEY VOLUME PRE-FILTER (BULLETPROOF FIX)
+# TAB 3: ECHO SURVEY VOLUME PRE-FILTER
 # ==========================================
 with tab3:
     st.subheader("📊 Echo Survey Volume Pre-Filter")
@@ -772,10 +772,7 @@ with tab3:
             
             row_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE','AF']
             
-            # 1. Convert survey raw values to numeric safely
             df_numeric = df_survey_raw.apply(pd.to_numeric, errors='coerce')
-            
-            # 2. Identify rows with numeric survey data (rows having >= 3 numeric cells)
             numeric_row_mask = df_numeric.notnull().sum(axis=1) >= 3
             
             blocks = []
@@ -793,7 +790,6 @@ with tab3:
             for p_idx, b in enumerate(blocks):
                 plt_name = unique_map_plates[p_idx] if p_idx < len(unique_map_plates) else f"Plate_{p_idx+1}"
                 
-                # Check column 0 vs column 1 for numeric values in this block
                 col0_valid = df_numeric.iloc[b, 0].notnull().sum()
                 start_col = 0 if col0_valid >= 10 else 1
 
@@ -812,7 +808,6 @@ with tab3:
                                     'Measured_Volume_uL': float(val)
                                 })
 
-            # Explicitly initialize columns so DataFrame is never column-less
             survey_df = pd.DataFrame(survey_recs, columns=['Plate_1536', 'Well_1536', 'Measured_Volume_uL'])
             
             if not survey_df.empty and 'Plate_1536' in map_df.columns and 'Well_1536' in map_df.columns:
@@ -849,7 +844,7 @@ with tab3:
             st.error(f"Error parsing survey file: {ex}")
 
 # ==========================================
-# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER (COMPLETE UPDATE ENGINE)
+# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER
 # ==========================================
 with tab4:
     st.subheader("⚡ Post-Run Echo Exception Reconciler & Asset Generator")
@@ -887,7 +882,6 @@ with tab4:
 
             exc_df.columns = [str(c).strip() for c in exc_df.columns]
             dest_well_col = next((c for c in exc_df.columns if 'DEST' in c.upper() and 'WELL' in c.upper()), None)
-            src_well_col = next((c for c in exc_df.columns if ('SRC' in c.upper() or 'SOURCE' in c.upper()) and 'WELL' in c.upper()), None)
             
             if dest_well_col:
                 orig_df['norm_source_well'] = orig_df['Source_Well_384'].apply(normalize_well)
@@ -917,6 +911,29 @@ with tab4:
                         
                 reconciled_df = orig_df.drop(index=list(set(rows_to_drop))).reset_index(drop=True)
                 
+                # RECOVERY STEP: Automatically construct Assay_Plate_96 / Assay_Well_96 if missing
+                if 'Assay_Plate_96' not in reconciled_df.columns or 'Assay_Well_96' not in reconciled_df.columns:
+                    unique_source_wells = reconciled_df[['Source_Plate_384', 'Source_Well_384']].drop_duplicates().reset_index(drop=True)
+                    assay_rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+                    assay_cols = range(1, 13)
+                    assay_coordinates = [f"{r}{c:02d}" for r in assay_rows for c in assay_cols]
+                    
+                    first_src_plt = str(reconciled_df['Source_Plate_384'].iloc[0])
+                    prefix = first_src_plt.split('_SRC_PLT_')[0] if '_SRC_PLT_' in first_src_plt else "ASMS_NPC"
+                    
+                    coordinate_mapping_index = {}
+                    for idx, r_wells in unique_source_wells.iterrows():
+                        plate_idx = (idx // 96) + 1
+                        assigned_96_well = assay_coordinates[idx % 96]
+                        coordinate_mapping_index[(r_wells['Source_Plate_384'], r_wells['Source_Well_384'])] = (f"{prefix}_ASSAY_PLT_{plate_idx}", assigned_96_well)
+                        
+                    reconciled_df['Assay_Plate_96'] = reconciled_df.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
+                    reconciled_df['Assay_Well_96'] = reconciled_df.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
+
+                # Fallback defaults for optional visual attributes
+                if 'SMILES' not in reconciled_df.columns: reconciled_df['SMILES'] = ""
+                if 'Ionization_Mode' not in reconciled_df.columns: reconciled_df['Ionization_Mode'] = 'positive'
+
                 # Recalculate pool sizes and fluidics
                 target_total_nl = target_vol_ul_recon * 1000.0
                 pool_counts = reconciled_df.groupby(['Source_Plate_384', 'norm_source_well']).size().reset_index(name='Actual_Pool_Count')
@@ -976,7 +993,7 @@ with tab4:
                 rc_col1, rc_col2, rc_col3, rc_col4 = st.columns(4)
 
                 src_excel_cols = [
-                    'Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
+                    'Source_Plate_384', 'Source_Well_384', 'Assay_Plate_96', 'Assay_Well_96', 'Well_Sub_Index', 'Compounds_In_Pool', 'Backflush_Required',
                     'NCGC_ID', 'Exact_Mass', 'Target_m_z', 'Min_Δm/z_In_Well', 'DMSO_Backflush_Volume_nL', 'Total_Well_Fluid_Vol_nL', 'SMILES'
                 ]
                 valid_src_cols = [c for c in src_excel_cols if c in reconciled_df.columns]
