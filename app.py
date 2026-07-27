@@ -959,7 +959,7 @@ with tab4:
                 
                 designated_max = orig_df['Designated_Pool_Size'].iloc[0] if 'Designated_Pool_Size' in orig_df.columns else 10
                 reconciled_df['Pool_Status'] = reconciled_df.apply(
-                    lambda r: "COMPLETE" if r['Actual_Pool_Count'] == designated_max else f"⚠️ INCOMPLETE ({r['Actual_Pool_Count']}/{designated_max})", axis=1
+                    lambda r: "COMPLETE" if r['Actual_Pool_Count'] == designated_max else f"INCOMPLETE ({r['Actual_Pool_Count']}/{designated_max})", axis=1
                 )
                 
                 skewed_pools = len(failed_counts_by_well)
