@@ -7,10 +7,11 @@ import os
 import io
 import math
 import json
+import re
 
-st.set_page_config(page_title="ASMS Project Engine", page_icon="⚜", layout="wide")
+st.set_page_config(page_title="ASMS Compound Suite", page_icon="⚜", layout="wide")
 
-st.title("ASMS Compound Pooling & Quality Control Panel")
+st.title("NCATS ASMS Compound Pooling & Quality Control Suite")
 
 # Top Navigation Tabs
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -59,11 +60,11 @@ with tab1:
         uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
 
     with up_col2:
-        st.info("**Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first.")
+        st.info("💡 **Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first!")
         uploaded_inventory = st.file_uploader(
             "Optional: Upload 1536 Master Plate Maps", 
             type=["csv", "xlsx", "xls"], 
-            help="Provide the linear manifest file containing NCGC locations to generate the initial 1536 to 384 pool picklist file."
+            help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file."
         )
 
     def process_sdf(file_path):
@@ -462,10 +463,10 @@ with tab1:
             
             let headerHTML = `<span>Contents of ${plateContextLabel}: ${wellName} (${wellModeLabel} Mode)</span>`;
             if(currentViewMode === 'source' && compounds[0].backflush > 0) {
-                headerHTML += `<span class="backflush-tag">⚠️ DMSO Back-flush: +${compounds[0].backflush} nL</span>`;
+                headerHTML += `<span class="backflush-tag">DMSO Back-flush: +${compounds[0].backflush} nL</span>`;
             }
             if(currentViewMode === 'assay' && compounds[0].actual_count < compounds[0].target_count) {
-                headerHTML += `<span class="warning-tag">⚠️ Incomplete Pool: ${compounds[0].actual_count}/${compounds[0].target_count} Compounds</span>`;
+                headerHTML += `<span class="warning-tag">Incomplete Pool: ${compounds[0].actual_count}/${compounds[0].target_count} Compounds</span>`;
             }
             document.getElementById('panelTitle').innerHTML = headerHTML;
             
@@ -499,14 +500,14 @@ with tab1:
     # Main Pipeline Execution
     if uploaded_file is not None:
         if not plate_prefix.strip():
-            st.error("⚠**Missing Required Field:** Enter a unique Plate Name Prefix above before running calculations.")
+            st.error("**Missing Required Field:** Enter a unique Plate Name Prefix above before running calculations.")
             st.stop()
 
         max_possible_compound_vol_nl = pool_size * vol_per_comp
         target_source_vol_nl = target_source_vol_ul * 1000.0
         
         if max_possible_compound_vol_nl > target_source_vol_nl:
-            st.error(f"**Physical Fluidic Error:** You requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires **{max_possible_compound_vol_nl / 1000.0} µL** per well from library aliquots alone, physically overflowing your target source well capacity of **{target_source_vol_ul} µL**.")
+            st.error(f"**Physical Fluidic Paradox Error:** You requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires **{max_possible_compound_vol_nl / 1000.0} µL** per well from library aliquots alone, physically overflowing your target source well capacity of **{target_source_vol_ul} µL**.")
             st.stop()
 
         with st.spinner("Executing double-stage library calculations..."):
@@ -518,10 +519,10 @@ with tab1:
             if os.path.exists(local_tmp_path): os.remove(local_tmp_path)
             
             if not raw_df.empty:
-                # 🛠️ PREVENT DUPLICATE SDF COMPOUND POOLING:
+                # PREVENT DUPLICATE SDF COMPOUND POOLING
                 raw_df = raw_df.drop_duplicates(subset=['SAMPLE_ID'], keep='first').reset_index(drop=True)
-    
-            lib_stock_uM = lib_stock_conc * 1000.0
+                
+                lib_stock_uM = lib_stock_conc * 1000.0
                 
                 source_map = assign_wells_advanced(
                     raw_df, 
@@ -549,7 +550,7 @@ with tab1:
                 source_map['Assay_Well_96'] = source_map.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
                 source_map['Designated_Pool_Size'] = pool_size
                 source_map['Actual_Pool_Size'] = source_map['Compounds_In_Pool']
-                source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"⚠️ INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
+                source_map['Pool_Status'] = source_map.apply(lambda r: "COMPLETE" if r['Actual_Pool_Size'] == pool_size else f"INCOMPLETE ({r['Actual_Pool_Size']}/{pool_size})", axis=1)
                 source_map = source_map.sort_values(by=['Source_Plate_384', 'Source_Well_384', 'Well_Sub_Index']).reset_index(drop=True)
                 
                 total_384_wells = len(source_map['Source_Well_384'].unique())
@@ -574,9 +575,9 @@ with tab1:
                 
                 violating_pools = source_map[source_map['Min_Δm/z_In_Well'] < min_mz_threshold]['Source_Well_384'].nunique()
                 if violating_pools > 0:
-                    st.warning(f"⚠️ Mass Resolution Alert: {violating_pools} well pools contain compounds falling below your preferred {min_mz_threshold} Da Δm/z resolution limit.")
+                    st.warning(f"Mass Resolution Alert: {violating_pools} well pools contain compounds falling below your preferred {min_mz_threshold} Da Δm/z resolution limit.")
                 else:
-                    st.info(f"✅ Mass Resolution Checked: All pooling mixtures maintain structural Δm/z separation limits above {min_mz_threshold} Da.")
+                    st.info(f"Mass Resolution Checked: All pooling mixtures maintain structural Δm/z separation limits above {min_mz_threshold} Da.")
                     
                 # ==========================================
                 # 5. Multi-Deliverable Export Hub
@@ -622,7 +623,7 @@ with tab1:
                                 picklist_1536_to_384.to_csv(buf_up, index=False)
                                 csv_up = buf_up.getvalue()
                                 
-                                st.success(f"✅ **1536 ➔ 384 Consolidation Picklist Generated!** Matched {len(consolidation_df)} compound locations.")
+                                st.success(f"**1536 ➔ 384 Consolidation Picklist Generated!** Matched {len(consolidation_df)} compound locations.")
                                 st.download_button(
                                     label="0. Download 1536 ➔ 384 Consolidation Picklist (.csv)",
                                     data=csv_up,
@@ -632,9 +633,9 @@ with tab1:
                                     use_container_width=False
                                 )
                             else:
-                                st.error("⚠️ **0 Match IDs Identified:** Make sure your 1536 Master Map contains an 'NCGC_ID' column matching the SDF.")
+                                st.error("**0 Match IDs Identified:** Make sure your 1536 Master Map contains an 'NCGC_ID' column matching the SDF.")
                         else:
-                            st.error(f"⚠️ **Missing Required Mapping Columns:** Need 'NCGC_ID', 'Plate_1536', and 'Well_1536' in Master Map. Found columns: {list(inv_df.columns)}")
+                            st.error(f"**Missing Required Mapping Columns:** Need 'NCGC_ID', 'Plate_1536', and 'Well_1536' in Master Map. Found columns: {list(inv_df.columns)}")
                     except Exception as ex:
                         st.error(f"Upstream pipeline error: {str(ex)}")
 
@@ -717,7 +718,7 @@ with tab1:
 # ==========================================
 with tab2:
     st.subheader("Visual Plate Map Unpivoter")
-    st.write("Convert 2D visual grid Excel sheets (A–AF rows) into flat, linearized CSV manifests.")
+    st.write("Convert 2D visual grid Excel sheets (A–AF rows) into flat CSV manifests.")
 
     uploaded_map_file = st.file_uploader("Upload Excel Plate Map (.xlsx)", type=["xlsx", "xls"], key="unpivoter_uploader")
 
@@ -732,7 +733,6 @@ with tab2:
                     row_label = str(df_map.iloc[r_idx, 0]).strip()
                     if not row_label or row_label.lower() == 'nan': continue
                     
-                    # c_idx = 1 maps to 1536 Col 01 (Excel B), c_idx = 5 maps to 1536 Col 05 (Excel F)
                     for c_idx in range(1, df_map.shape[1]):
                         val = df_map.iloc[r_idx, c_idx]
                         if pd.notna(val) and str(val).strip().lower() != 'nan':
@@ -746,15 +746,15 @@ with tab2:
             
             buf = io.StringIO()
             flat_df.to_csv(buf, index=False)
-            st.download_button("Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
+            st.download_button("⬇️ Download Linearized CSV Map", buf.getvalue(), "1536_master_map_flat.csv", "text/csv", type="primary")
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
 # ==========================================
-# TAB 3: ECHO SURVEY VOLUME PRE-FILTER 
+# TAB 3: ECHO SURVEY VOLUME PRE-FILTER
 # ==========================================
 with tab3:
-    st.subheader("📊 Echo Survey Volume Pre-Filter")
+    st.subheader("Echo Survey Volume Pre-Filter")
     st.write("Cross-reference your 1536 master plate map against an Echo Volume Survey spreadsheet to filter out low-volume wells before running calculations.")
 
     col_s1, col_s2 = st.columns(2)
@@ -776,7 +776,6 @@ with tab3:
             
             row_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE','AF']
             
-            # Detect stacked plate blocks
             blocks = []
             cur_b = []
             for r in range(len(df_survey_raw)):
@@ -797,8 +796,6 @@ with tab3:
             for p_idx, b in enumerate(blocks):
                 plt_name = unique_map_plates[p_idx] if p_idx < len(unique_map_plates) else f"Plate_{p_idx+1}"
                 
-                # 🛠️ SMART START-COLUMN DETECTION:
-                # Check if Column 0 (Excel Col A) contains numeric survey values
                 col0_numeric_count = len([x for x in df_survey_raw.iloc[b, 0].dropna() if isinstance(x, (int, float))])
                 start_col = 0 if col0_numeric_count >= 10 else 1
 
@@ -836,7 +833,7 @@ with tab3:
             st.download_button("⬇️ Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
 
             if not depleted_wells.empty:
-                st.subheader("⚠️ Depleted Compounds Reorder Manifest")
+                st.subheader("Depleted Compounds Reorder Manifest")
                 st.dataframe(depleted_wells[['NCGC_ID', 'Plate_1536', 'Well_1536', 'Measured_Volume_uL']], use_container_width=True)
                 
                 buf_dep = io.StringIO()
@@ -845,10 +842,9 @@ with tab3:
 
         except Exception as ex:
             st.error(f"Error parsing survey file: {ex}")
-         
 
 # ==========================================
-# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER (NORMALIZATION FIX)
+# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER
 # ==========================================
 with tab4:
     st.subheader("⚡ Post-Run Echo Exception Reconciler")
@@ -863,7 +859,6 @@ with tab4:
     target_vol_ul_recon = st.number_input("Target 384 Well Working Volume (µL)", min_value=2.0, max_value=50.0, value=10.0, step=1.0)
     aliquot_vol_nl_recon = st.number_input("Aliquot Volume per Compound (nL)", min_value=10, max_value=5000, value=600, step=100)
 
-    import re
     def normalize_well(well_str):
         if pd.isna(well_str): return ""
         s = str(well_str).strip()
@@ -889,7 +884,6 @@ with tab4:
             dest_well_col = next((c for c in exc_df.columns if 'DEST' in c.upper() and 'WELL' in c.upper()), None)
             
             if dest_well_col:
-                # 🛠️ NORMALIZE WELL COORDINATES (e.g. 'B6' -> 'B06')
                 exc_df['norm_dest_well'] = exc_df[dest_well_col].apply(normalize_well)
                 failed_counts = exc_df[exc_df['norm_dest_well'] != ""].groupby('norm_dest_well').size().to_dict()
                 
