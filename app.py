@@ -8,9 +8,9 @@ import io
 import math
 import json
 
-st.set_page_config(page_title="ASMS Compound Suite", page_icon="⚜", layout="wide")
+st.set_page_config(page_title="ASMS Project Engine", page_icon="⚜", layout="wide")
 
-st.title("NCATS ASMS Compound Pooling & Quality Control Suite")
+st.title("ASMS Compound Pooling & Quality Control Panel")
 
 # Top Navigation Tabs
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -63,7 +63,7 @@ with tab1:
         uploaded_inventory = st.file_uploader(
             "Optional: Upload 1536 Master Plate Maps", 
             type=["csv", "xlsx", "xls"], 
-            help="Provide the manifest file containing real-world freezer locations to generate the initial 1536 to 384 pool picklist file."
+            help="Provide the linear manifest file containing NCGC locations to generate the initial 1536 to 384 pool picklist file."
         )
 
     def process_sdf(file_path):
@@ -499,14 +499,14 @@ with tab1:
     # Main Pipeline Execution
     if uploaded_file is not None:
         if not plate_prefix.strip():
-            st.error("⚠️ **Missing Required Field:** Enter a unique Plate Name Prefix above before running calculations.")
+            st.error("⚠**Missing Required Field:** Enter a unique Plate Name Prefix above before running calculations.")
             st.stop()
 
         max_possible_compound_vol_nl = pool_size * vol_per_comp
         target_source_vol_nl = target_source_vol_ul * 1000.0
         
         if max_possible_compound_vol_nl > target_source_vol_nl:
-            st.error(f"❌ **Physical Fluidic Paradox Error:** You requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires **{max_possible_compound_vol_nl / 1000.0} µL** per well from library aliquots alone, physically overflowing your target source well capacity of **{target_source_vol_ul} µL**.")
+            st.error(f"**Physical Fluidic Error:** You requested a pool size of **{pool_size} compounds** at **{vol_per_comp} nL** each. This requires **{max_possible_compound_vol_nl / 1000.0} µL** per well from library aliquots alone, physically overflowing your target source well capacity of **{target_source_vol_ul} µL**.")
             st.stop()
 
         with st.spinner("Executing double-stage library calculations..."):
@@ -518,7 +518,10 @@ with tab1:
             if os.path.exists(local_tmp_path): os.remove(local_tmp_path)
             
             if not raw_df.empty:
-                lib_stock_uM = lib_stock_conc * 1000.0
+                # 🛠️ PREVENT DUPLICATE SDF COMPOUND POOLING:
+                raw_df = raw_df.drop_duplicates(subset=['SAMPLE_ID'], keep='first').reset_index(drop=True)
+    
+            lib_stock_uM = lib_stock_conc * 1000.0
                 
                 source_map = assign_wells_advanced(
                     raw_df, 
@@ -714,7 +717,7 @@ with tab1:
 # ==========================================
 with tab2:
     st.subheader("Visual Plate Map Unpivoter")
-    st.write("Convert 2D visual grid Excel sheets (A–AF rows) into flat CSV manifests.")
+    st.write("Convert 2D visual grid Excel sheets (A–AF rows) into flat, linearized CSV manifests.")
 
     uploaded_map_file = st.file_uploader("Upload Excel Plate Map (.xlsx)", type=["xlsx", "xls"], key="unpivoter_uploader")
 
@@ -748,15 +751,14 @@ with tab2:
             st.error(f"Error processing file: {e}")
 
 # ==========================================
-# TAB 3: ECHO SURVEY VOLUME PRE-FILTER (CORRECTED & ENHANCED)
+# TAB 3: ECHO SURVEY VOLUME PRE-FILTER 
 # ==========================================
 with tab3:
-    st.subheader("Echo Survey Volume Pre-Filter")
+    st.subheader("📊 Echo Survey Volume Pre-Filter")
     st.write("Cross-reference your 1536 master plate map against an Echo Volume Survey spreadsheet to filter out low-volume wells before running calculations.")
 
     col_s1, col_s2 = st.columns(2)
     with col_s1:
-        # Accepts CSV, XLSX, and XLS files
         s_map = st.file_uploader("1. Upload Linearized 1536 Master Map (.csv, .xlsx, .xls)", type=["csv", "xlsx", "xls"], key="s_map_up")
     with col_s2:
         s_survey = st.file_uploader("2. Upload Echo Survey Spreadsheet (.xlsx, .xls)", type=["xlsx", "xls"], key="s_surv_up")
@@ -774,10 +776,17 @@ with tab3:
             
             row_letters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','AA','AB','AC','AD','AE','AF']
             
+            # Detect stacked plate blocks
             blocks = []
             cur_b = []
             for r in range(len(df_survey_raw)):
-                if len(df_survey_raw.iloc[r, 1:].dropna()) > 0: cur_b.append(r)
+                non_nulls = df_survey_raw.iloc[r].dropna()
+                if len(non_nulls) > 0:
+                    numeric_vals = [x for x in non_nulls if isinstance(x, (int, float))]
+                    if len(numeric_vals) > 0:
+                        cur_b.append(r)
+                    else:
+                        if cur_b: blocks.append(cur_b); cur_b = []
                 else:
                     if cur_b: blocks.append(cur_b); cur_b = []
             if cur_b: blocks.append(cur_b)
@@ -787,17 +796,26 @@ with tab3:
 
             for p_idx, b in enumerate(blocks):
                 plt_name = unique_map_plates[p_idx] if p_idx < len(unique_map_plates) else f"Plate_{p_idx+1}"
+                
+                # 🛠️ SMART START-COLUMN DETECTION:
+                # Check if Column 0 (Excel Col A) contains numeric survey values
+                col0_numeric_count = len([x for x in df_survey_raw.iloc[b, 0].dropna() if isinstance(x, (int, float))])
+                start_col = 0 if col0_numeric_count >= 10 else 1
+
                 for r_i, r_idx in enumerate(b):
+                    if r_i >= len(row_letters): break
                     row_let = row_letters[r_i]
-                    # c_idx = 1 maps directly to 1536 Col 01 (Excel B), c_idx = 5 maps to Col 05 (Excel F)
-                    for col_idx in range(1, df_survey_raw.shape[1]):
+                    
+                    for col_idx in range(start_col, df_survey_raw.shape[1]):
                         v_val = df_survey_raw.iloc[r_idx, col_idx]
-                        if pd.notna(v_val):
-                            survey_recs.append({
-                                'Plate_1536': plt_name,
-                                'Well_1536': f"{row_let}{col_idx:02d}",
-                                'Measured_Volume_uL': float(v_val)
-                            })
+                        if pd.notna(v_val) and isinstance(v_val, (int, float)):
+                            well_col = (col_idx - start_col) + 1
+                            if well_col <= 48:
+                                survey_recs.append({
+                                    'Plate_1536': plt_name,
+                                    'Well_1536': f"{row_let}{well_col:02d}",
+                                    'Measured_Volume_uL': float(v_val)
+                                })
 
             survey_df = pd.DataFrame(survey_recs)
             merged_pre = pd.merge(map_df, survey_df, on=['Plate_1536', 'Well_1536'], how='left')
@@ -818,7 +836,7 @@ with tab3:
             st.download_button("⬇️ Download Cleaned 1536 Map (.csv)", buf_clean.getvalue(), "1536_master_map_sufficient_vol.csv", "text/csv", type="primary")
 
             if not depleted_wells.empty:
-                st.subheader("⚠Depleted Compounds Reorder Manifest")
+                st.subheader("⚠️ Depleted Compounds Reorder Manifest")
                 st.dataframe(depleted_wells[['NCGC_ID', 'Plate_1536', 'Well_1536', 'Measured_Volume_uL']], use_container_width=True)
                 
                 buf_dep = io.StringIO()
@@ -827,12 +845,13 @@ with tab3:
 
         except Exception as ex:
             st.error(f"Error parsing survey file: {ex}")
+         
 
 # ==========================================
-# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER
+# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER (NORMALIZATION FIX)
 # ==========================================
 with tab4:
-    st.subheader("Post-Run Echo Exception Reconciler")
+    st.subheader("⚡ Post-Run Echo Exception Reconciler")
     st.write("Upload an Echo Exception/Transfer Report after a run to automatically calculate corrected DMSO back-flushes and strip skipped compounds from downstream manifests.")
 
     col_r1, col_r2 = st.columns(2)
@@ -842,26 +861,43 @@ with tab4:
         report_up = st.file_uploader("2. Upload Echo Exception Report (.csv or .xlsx)", type=["csv", "xlsx"], key="r_up")
 
     target_vol_ul_recon = st.number_input("Target 384 Well Working Volume (µL)", min_value=2.0, max_value=50.0, value=10.0, step=1.0)
-    aliquot_vol_nl_recon = st.number_input("Aliquot Volume per Compound (nL)", min_value=10, max_value=5000, value=500, step=100)
+    aliquot_vol_nl_recon = st.number_input("Aliquot Volume per Compound (nL)", min_value=10, max_value=5000, value=600, step=100)
+
+    import re
+    def normalize_well(well_str):
+        if pd.isna(well_str): return ""
+        s = str(well_str).strip()
+        m = re.match(r"^([A-Za-z]+)(\d+)$", s)
+        if m:
+            row, col = m.groups()
+            return f"{row.upper()}{int(col):02d}"
+        return s.upper()
 
     if manifest_up is not None and report_up is not None:
         try:
-            if manifest_up.name.endswith('.csv'): orig_df = pd.read_csv(manifest_up)
-            else: orig_df = pd.read_excel(manifest_up)
+            if manifest_up.name.endswith('.csv'): 
+                orig_df = pd.read_csv(manifest_up)
+            else: 
+                orig_df = pd.read_excel(manifest_up)
 
-            if report_up.name.endswith('.csv'): exc_df = pd.read_csv(report_up)
-            else: exc_df = pd.read_excel(report_up)
+            if report_up.name.endswith('.csv'): 
+                exc_df = pd.read_csv(report_up)
+            else: 
+                exc_df = pd.read_excel(report_up)
 
             exc_df.columns = [str(c).strip() for c in exc_df.columns]
             dest_well_col = next((c for c in exc_df.columns if 'DEST' in c.upper() and 'WELL' in c.upper()), None)
             
             if dest_well_col:
-                failed_counts = exc_df[exc_df[dest_well_col].notnull()].groupby(dest_well_col).size().to_dict()
+                # 🛠️ NORMALIZE WELL COORDINATES (e.g. 'B6' -> 'B06')
+                exc_df['norm_dest_well'] = exc_df[dest_well_col].apply(normalize_well)
+                failed_counts = exc_df[exc_df['norm_dest_well'] != ""].groupby('norm_dest_well').size().to_dict()
                 
                 reconciled_rows = []
                 for well_384, group in orig_df.groupby('Source_Well_384'):
+                    norm_well_384 = normalize_well(well_384)
                     assigned_cnt = len(group)
-                    failed_cnt = failed_counts.get(well_384, 0)
+                    failed_cnt = failed_counts.get(norm_well_384, 0)
                     actual_cnt = max(0, assigned_cnt - failed_cnt)
                     
                     actual_comp_fluid_nl = actual_cnt * aliquot_vol_nl_recon
@@ -870,7 +906,7 @@ with tab4:
                     
                     reconciled_rows.append({
                         'Source_Plate_384': group['Source_Plate_384'].iloc[0],
-                        'Source_Well_384': well_384,
+                        'Source_Well_384': norm_well_384,
                         'Assigned_Compounds': assigned_cnt,
                         'Failed_Transfers': failed_cnt,
                         'Actual_Compounds_Added': actual_cnt,
@@ -888,17 +924,20 @@ with tab4:
                 rm3.metric("384 Wells Requiring Corrected Back-flush", len(skewed_wells))
 
                 st.subheader("Corrected DMSO Back-flush Picklist (For Echo Top-Up Run)")
-                backflush_picklist = skewed_wells[['Source_Plate_384', 'Source_Well_384', 'Corrected_DMSO_Backflush_nL']].copy()
-                backflush_picklist.columns = ['Destination Plate Name', 'Destination Well', 'Transfer Volume']
-                backflush_picklist['Source Plate Name'] = 'DMSO_SOURCE'
-                backflush_picklist['Source Well'] = 'A01'
-                backflush_picklist = backflush_picklist[['Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume']]
+                if not skewed_wells.empty:
+                    backflush_picklist = skewed_wells[['Source_Plate_384', 'Source_Well_384', 'Corrected_DMSO_Backflush_nL']].copy()
+                    backflush_picklist.columns = ['Destination Plate Name', 'Destination Well', 'Transfer Volume']
+                    backflush_picklist['Source Plate Name'] = 'DMSO_SOURCE'
+                    backflush_picklist['Source Well'] = 'A01'
+                    backflush_picklist = backflush_picklist[['Source Plate Name', 'Source Well', 'Destination Plate Name', 'Destination Well', 'Transfer Volume']]
 
-                st.dataframe(backflush_picklist, use_container_width=True)
+                    st.dataframe(backflush_picklist, use_container_width=True)
 
-                buf_bf = io.StringIO()
-                backflush_picklist.to_csv(buf_bf, index=False)
-                st.download_button("⬇️ Download Corrected Back-flush Picklist (.csv)", buf_bf.getvalue(), "corrected_dmso_backflush_picklist.csv", "text/csv", type="primary")
+                    buf_bf = io.StringIO()
+                    backflush_picklist.to_csv(buf_bf, index=False)
+                    st.download_button("⬇️ Download Corrected Back-flush Picklist (.csv)", buf_bf.getvalue(), "corrected_dmso_backflush_picklist.csv", "text/csv", type="primary")
+                else:
+                    st.info("No volume-skewed wells detected across evaluated pools.")
 
         except Exception as ex_recon:
             st.error(f"Error reconciling report: {ex_recon}")
