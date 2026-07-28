@@ -11,7 +11,7 @@ import re
 
 st.set_page_config(page_title="ASMS Compound Suite", page_icon="⚜", layout="wide")
 
-st.title("NCATS ASMS Compound Pooling & Quality Control Panel")
+st.title("ASMS Compound Pooling & Quality Control Panels")
 
 # Top Navigation Tabs
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -327,13 +327,14 @@ with tab1:
     )
 
     st.markdown("### Upload Core Campaign Assets")
+    st.info("**Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first.")
+
     up_col1, up_col2 = st.columns(2)
 
     with up_col1:
         uploaded_file = st.file_uploader("Required: Choose an SDF Library File", type=["sdf"])
 
     with up_col2:
-        st.info("**Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first.")
         uploaded_inventory = st.file_uploader(
             "Optional: Upload 1536 Master Plate Maps", 
             type=["csv", "xlsx", "xls"], 
@@ -844,20 +845,20 @@ with tab3:
             st.error(f"Error parsing survey file: {ex}")
 
 # ==========================================
-# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER (SMART IONIZATION MODE RECONSTRUCTION)
+# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER
 # ==========================================
 with tab4:
     st.subheader("Post-Run Echo Exception Reconciler & Asset Generator")
-    st.write("Upload an Echo Exception/Transfer Report alongside your Source Prep Manifest to recalculate DMSO back-flushes, update campaign manifests, and re-render your interactive HTML map.")
+    st.write("Upload an Echo Exception/Transfer Report alongside your Source Prep Manifest to recalculate DMSO back-flushes, update campaign manifests, and re-render the interactive HTML map.")
 
     col_r1, col_r2 = st.columns(2)
     with col_r1:
         manifest_up = st.file_uploader("1. Upload Source Prep Manifest (.xlsx or .csv)", type=["xlsx", "csv"], key="m_up")
     with col_r2:
-        report_up = st.file_uploader("2. Upload Echo Exception Report (.csv or .xlsx)", type=["csv", "xlsx"], key="r_up")
+        report_up = st.file_uploader("2. Upload Echo Exception Report (.xlsx or .csv)", type=["xlsx", "csv"], key="r_up")
 
     target_vol_ul_recon = st.number_input("Target 384 Well Working Volume (µL)", min_value=2.0, max_value=50.0, value=10.0, step=1.0)
-    aliquot_vol_nl_recon = st.number_input("Aliquot Volume per Compound (nL)", min_value=10, max_value=5000, value=600, step=100)
+    aliquot_vol_nl_recon = st.number_input("Aliquot Volume per Compound (nL)", min_value=10, max_value=5000, value=1000, step=100)
 
     def normalize_well(well_str):
         if pd.isna(well_str): return ""
