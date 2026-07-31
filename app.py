@@ -11,7 +11,7 @@ import re
 
 st.set_page_config(page_title="ASMS Compound Suite", page_icon="⚜", layout="wide")
 
-st.title("ASMS Compound Pooling & Quality Control Panels")
+st.title("NCATS ASMS Compound Pooling & Quality Control Suite")
 
 # Top Navigation Tabs
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -33,13 +33,15 @@ def generate_dual_interactive_html(df, target_pool_max):
         
         svg_text = ""
         try:
-            mol = Chem.MolFromSmiles(row['SMILES']) if pd.notna(row['SMILES']) else None
-            if mol:
-                drawer = rdMolDraw2D.MolDraw2DSVG(160, 160)
-                clean_mol = rdMolDraw2D.PrepareMolForDrawing(mol)
-                drawer.DrawMolecule(clean_mol)
-                drawer.FinishDrawing()
-                svg_text = drawer.GetDrawingText()
+            smiles_str = str(row['SMILES']).strip() if ('SMILES' in row and pd.notna(row['SMILES'])) else ""
+            if smiles_str and smiles_str.lower() != 'nan':
+                mol = Chem.MolFromSmiles(smiles_str)
+                if mol:
+                    drawer = rdMolDraw2D.MolDraw2DSVG(160, 160)
+                    clean_mol = rdMolDraw2D.PrepareMolForDrawing(mol)
+                    drawer.DrawMolecule(clean_mol)
+                    drawer.FinishDrawing()
+                    svg_text = drawer.GetDrawingText()
         except:
             svg_text = ""
             
@@ -47,7 +49,7 @@ def generate_dual_interactive_html(df, target_pool_max):
             'id': row['NCGC_ID'],
             'mass': float(row['Exact_Mass']),
             'mz': float(row['Target_m_z']),
-            'smiles': str(row['SMILES']) if pd.notna(row['SMILES']) else "",
+            'smiles': str(row['SMILES']) if ('SMILES' in row and pd.notna(row['SMILES']) and str(row['SMILES']).lower() != 'nan') else "",
             'img': svg_text,
             'mode': str(row['Ionization_Mode']).lower() if 'Ionization_Mode' in row and pd.notna(row['Ionization_Mode']) else 'positive',
             'backflush': int(row['DMSO_Backflush_Volume_nL']),
@@ -327,7 +329,7 @@ with tab1:
     )
 
     st.markdown("### Upload Core Campaign Assets")
-    st.info("**Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first.")
+    st.info("💡 **Have a 2D visual map or volume survey?** Use Tabs 2 or 3 above to unpivot or pre-filter depleted wells first!")
 
     up_col1, up_col2 = st.columns(2)
 
@@ -849,16 +851,18 @@ with tab3:
 # ==========================================
 with tab4:
     st.subheader("Post-Run Echo Exception Reconciler & Asset Generator")
-    st.write("Upload an Echo Exception/Transfer Report alongside your Source Prep Manifest to recalculate DMSO back-flushes, update campaign manifests, and re-render the interactive HTML map.")
+    st.write("Upload an Echo Exception/Transfer Report alongside your Source Prep Manifest to recalculate DMSO back-flushes, update campaign manifests, and re-render your interactive HTML map.")
 
-    col_r1, col_r2 = st.columns(2)
+    col_r1, col_r2, col_r3 = st.columns(3)
     with col_r1:
         manifest_up = st.file_uploader("1. Upload Source Prep Manifest (.xlsx or .csv)", type=["xlsx", "csv"], key="m_up")
     with col_r2:
-        report_up = st.file_uploader("2. Upload Echo Exception Report (.xlsx or .csv)", type=["xlsx", "csv"], key="r_up")
+        report_up = st.file_uploader("2. Upload Echo Exception Report (.csv or .xlsx)", type=["csv", "xlsx"], key="r_up")
+    with col_r3:
+        sdf_up_recon = st.file_uploader("3. Optional: Upload SDF File to Restore Structures (.sdf)", type=["sdf"], key="sdf_up_recon")
 
     target_vol_ul_recon = st.number_input("Target 384 Well Working Volume (µL)", min_value=2.0, max_value=50.0, value=10.0, step=1.0)
-    aliquot_vol_nl_recon = st.number_input("Aliquot Volume per Compound (nL)", min_value=10, max_value=5000, value=1000, step=100)
+    aliquot_vol_nl_recon = st.number_input("Aliquot Volume per Compound (nL)", min_value=10, max_value=5000, value=600, step=100)
 
     def normalize_well(well_str):
         if pd.isna(well_str): return ""
@@ -912,7 +916,32 @@ with tab4:
                         
                 reconciled_df = orig_df.drop(index=list(set(rows_to_drop))).reset_index(drop=True)
                 
-                # RECOVERY STEP 1: Automatically construct Assay_Plate_96 / Assay_Well_96 if missing
+                # RECOVERY STEP 1: If optional SDF file is uploaded, restore SMILES strings!
+                if sdf_up_recon is not None:
+                    local_sdf_tmp = "temp_recon_sdf.sdf"
+                    with open(local_sdf_tmp, "wb") as f:
+                        f.write(sdf_up_recon.getvalue())
+                    supplier = Chem.SDMolSupplier(local_sdf_tmp)
+                    sdf_smiles_map = {}
+                    for mol in supplier:
+                        if mol is None: continue
+                        sample_id = None
+                        for prop in ['SAMPLE_ID', 'Name', 'ID', 'sample_id', 'id']:
+                            if mol.HasProp(prop):
+                                sample_id = mol.GetProp(prop)
+                                break
+                        if sample_id:
+                            base_id = str(sample_id).split('-')[0]
+                            try:
+                                sm = Chem.MolToSmiles(mol)
+                                if sm: sdf_smiles_map[base_id] = sm
+                            except: pass
+                    if os.path.exists(local_sdf_tmp): os.remove(local_sdf_tmp)
+                    
+                    reconciled_df['clean_id'] = reconciled_df['NCGC_ID'].astype(str).apply(lambda x: x.split('-')[0])
+                    reconciled_df['SMILES'] = reconciled_df['clean_id'].map(sdf_smiles_map).fillna("")
+
+                # RECOVERY STEP 2: Automatically construct Assay_Plate_96 / Assay_Well_96 if missing
                 if 'Assay_Plate_96' not in reconciled_df.columns or 'Assay_Well_96' not in reconciled_df.columns:
                     unique_source_wells = reconciled_df[['Source_Plate_384', 'Source_Well_384']].drop_duplicates().reset_index(drop=True)
                     assay_rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -931,13 +960,13 @@ with tab4:
                     reconciled_df['Assay_Plate_96'] = reconciled_df.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
                     reconciled_df['Assay_Well_96'] = reconciled_df.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
 
-                # RECOVERY STEP 2: Fallback defaults for missing columns
+                # RECOVERY STEP 3: Fallback defaults for missing columns
                 if 'Echo_Transfer_Volume_nL' not in reconciled_df.columns: reconciled_df['Echo_Transfer_Volume_nL'] = 100.0
                 if 'Assay_Total_Volume_µL' not in reconciled_df.columns: reconciled_df['Assay_Total_Volume_µL'] = 50.0
                 if 'Assay_Target_Conc_µM' not in reconciled_df.columns: reconciled_df['Assay_Target_Conc_µM'] = 10.0
                 if 'SMILES' not in reconciled_df.columns: reconciled_df['SMILES'] = ""
                 
-                # RECOVERY STEP 3: Smart Ionization Mode Reconstruction (from m/z delta)
+                # RECOVERY STEP 4: Smart Ionization Mode Reconstruction (from m/z delta)
                 if 'Ionization_Mode' not in reconciled_df.columns or reconciled_df['Ionization_Mode'].isna().all() or (reconciled_df['Ionization_Mode'] == 'positive').all():
                     if 'Target_m_z' in reconciled_df.columns and 'Exact_Mass' in reconciled_df.columns:
                         reconciled_df['Ionization_Mode'] = reconciled_df.apply(
@@ -960,7 +989,7 @@ with tab4:
                 
                 designated_max = orig_df['Designated_Pool_Size'].iloc[0] if 'Designated_Pool_Size' in orig_df.columns else 10
                 reconciled_df['Pool_Status'] = reconciled_df.apply(
-                    lambda r: "COMPLETE" if r['Actual_Pool_Count'] == designated_max else f"INCOMPLETE ({r['Actual_Pool_Count']}/{designated_max})", axis=1
+                    lambda r: "COMPLETE" if r['Actual_Pool_Count'] == designated_max else f"⚠️ INCOMPLETE ({r['Actual_Pool_Count']}/{designated_max})", axis=1
                 )
                 
                 skewed_pools = len(failed_counts_by_well)
