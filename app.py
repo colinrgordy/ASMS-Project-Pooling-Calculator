@@ -21,6 +21,24 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "⚡ 4. Post-Run Reconciler"
 ])
 
+# ==========================================
+# MASTER CONFIGURATION PANEL (SIDEBAR)
+# ==========================================
+st.sidebar.header("Configuration Panel")
+
+st.sidebar.subheader("1. Library Pooling Options")
+pool_size = st.sidebar.number_input("Target Compounds per Well", min_value=2, max_value=50, value=10, step=1)
+min_mz_threshold = st.sidebar.number_input("Minimum Allowed Δm/z Threshold (Da)", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
+
+st.sidebar.subheader("2. Volumetric Normalization & Physics")
+lib_stock_conc = st.sidebar.number_input("1536 Library Stock Concentration (mM)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
+vol_per_comp = st.sidebar.number_input("Source Plate: Aliquot Vol per Compound (nL)", min_value=10, max_value=5000, value=1000, step=100, help="Volume of each compound pipetted from the 1536 plate into the 384 source well.")
+target_source_vol_ul = st.sidebar.number_input("Source Plate: Target Total Well Volume (µL)", min_value=2.0, max_value=50.0, value=10.0, step=1.0, help="The desired final working volume inside the 384 Echo source well (typically 8-10 µL).")
+
+st.sidebar.subheader("3. Echo Assay Calculator")
+dest_well_vol = st.sidebar.number_input("Assay Plate: Total Well Volume (µL)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
+desired_conc = st.sidebar.number_input("Assay Plate: Target Concentration (µM)", min_value=0.1, max_value=100.0, value=10.0, step=1.0)
+
 def generate_dual_interactive_html(df, target_pool_max):
     source_dict = {}
     assay_dict = {}
@@ -305,21 +323,6 @@ with tab1:
         "binders discovery assay utilizing HRMS. Compiles library entries into consolidated 384-well acoustic "
         "source pools, tracks volume normalization, and maps nanoliter transfers to 96-well target plates."
     )
-
-    st.sidebar.header("Configuration Panel")
-
-    st.sidebar.subheader("1. Library Pooling Options")
-    pool_size = st.sidebar.number_input("Target Compounds per Well", min_value=2, max_value=50, value=10, step=1)
-    min_mz_threshold = st.sidebar.number_input("Minimum Allowed Δm/z Threshold (Da)", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
-
-    st.sidebar.subheader("2. Volumetric Normalization & Physics")
-    lib_stock_conc = st.sidebar.number_input("1536 Library Stock Concentration (mM)", min_value=1.0, max_value=100.0, value=10.0, step=1.0)
-    vol_per_comp = st.sidebar.number_input("Source Plate: Aliquot Vol per Compound (nL)", min_value=10, max_value=5000, value=1000, step=100, help="Volume of each compound pipetted from the 1536 plate into the 384 source well.")
-    target_source_vol_ul = st.sidebar.number_input("Source Plate: Target Total Well Volume (µL)", min_value=2.0, max_value=50.0, value=10.0, step=1.0, help="The desired final working volume inside the 384 Echo source well (typically 8-10 µL).")
-
-    st.sidebar.subheader("3. Echo Assay Calculator")
-    dest_well_vol = st.sidebar.number_input("Assay Plate: Total Well Volume (µL)", min_value=1.0, max_value=500.0, value=50.0, step=5.0)
-    desired_conc = st.sidebar.number_input("Assay Plate: Target Concentration (µM)", min_value=0.1, max_value=100.0, value=10.0, step=1.0)
 
     plate_prefix = st.text_input(
         "Required: Plate Name Prefix", 
@@ -847,7 +850,7 @@ with tab3:
             st.error(f"Error parsing survey file: {ex}")
 
 # ==========================================
-# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER (DYNAMIC PHYSICS CALCULATIONS)
+# TAB 4: POST-RUN ECHO EXCEPTION RECONCILER (FULL SIDEBAR PARAMETER BINDING)
 # ==========================================
 with tab4:
     st.subheader("⚡ Post-Run Echo Exception Reconciler & Asset Generator")
@@ -861,8 +864,12 @@ with tab4:
     with col_r3:
         sdf_up_recon = st.file_uploader("3. Optional: Upload SDF File to Restore Structures (.sdf)", type=["sdf"], key="sdf_up_recon")
 
-    target_vol_ul_recon = st.number_input("Target 384 Well Working Volume (µL)", min_value=2.0, max_value=50.0, value=6.0, step=1.0)
-    aliquot_vol_nl_recon = st.number_input("Aliquot Volume per Compound (nL)", min_value=10, max_value=5000, value=600, step=100)
+    st.info(f"💡 **Active Campaign Settings (from Configuration Panel):** "
+            f"Assay Target: **{desired_conc} µM** | "
+            f"Assay Well Vol: **{dest_well_vol} µL** | "
+            f"Source Working Vol: **{target_source_vol_ul} µL** | "
+            f"Aliquot/Compound: **{vol_per_comp} nL** | "
+            f"Stock Conc: **{lib_stock_conc} mM**")
 
     def normalize_well(well_str):
         if pd.isna(well_str): return ""
@@ -960,28 +967,19 @@ with tab4:
                     reconciled_df['Assay_Plate_96'] = reconciled_df.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][0], axis=1)
                     reconciled_df['Assay_Well_96'] = reconciled_df.apply(lambda r: coordinate_mapping_index[(r['Source_Plate_384'], r['Source_Well_384'])][1], axis=1)
 
-                # RECOVERY STEP 3: Fallback defaults and dynamic transfer volume calculation
-                if 'Assay_Total_Volume_µL' in reconciled_df.columns:
-                    assay_vol_ul_val = float(reconciled_df['Assay_Total_Volume_µL'].iloc[0])
-                else:
-                    assay_vol_ul_val = 50.0
-
-                if 'Assay_Target_Conc_µM' in reconciled_df.columns:
-                    assay_conc_uM_val = float(reconciled_df['Assay_Target_Conc_µM'].iloc[0])
-                else:
-                    assay_conc_uM_val = 10.0
-
-                lib_stock_uM_recon = 10000.0
-                target_src_nl_recon = target_vol_ul_recon * 1000.0
-                source_well_conc_uM_recon = lib_stock_uM_recon * (aliquot_vol_nl_recon / target_src_nl_recon)
+                # DYNAMIC PHYSICAL CALCULATIONS (BOUND DIRECTLY TO ACTIVE SIDEBAR PARAMETERS)
+                lib_stock_uM_recon = lib_stock_conc * 1000.0
+                target_src_nl_recon = target_source_vol_ul * 1000.0
+                source_well_conc_uM_recon = lib_stock_uM_recon * (vol_per_comp / target_src_nl_recon)
 
                 if source_well_conc_uM_recon > 0:
-                    calc_echo_vol_nl = round((assay_conc_uM_val * (assay_vol_ul_val * 1000.0)) / source_well_conc_uM_recon, 2)
+                    calc_echo_vol_nl = round((desired_conc * (dest_well_vol * 1000.0)) / source_well_conc_uM_recon, 2)
                 else:
                     calc_echo_vol_nl = 500.0
 
-                if 'Echo_Transfer_Volume_nL' not in reconciled_df.columns or (reconciled_df['Echo_Transfer_Volume_nL'] == 100.0).all():
-                    reconciled_df['Echo_Transfer_Volume_nL'] = calc_echo_vol_nl
+                reconciled_df['Echo_Transfer_Volume_nL'] = calc_echo_vol_nl
+                reconciled_df['Assay_Total_Volume_µL'] = dest_well_vol
+                reconciled_df['Assay_Target_Conc_µM'] = desired_conc
 
                 if 'SMILES' not in reconciled_df.columns: reconciled_df['SMILES'] = ""
                 
@@ -995,18 +993,18 @@ with tab4:
                         reconciled_df['Ionization_Mode'] = 'positive'
 
                 # Recalculate pool sizes and fluidics
-                target_total_nl = target_vol_ul_recon * 1000.0
+                target_total_nl = target_source_vol_ul * 1000.0
                 pool_counts = reconciled_df.groupby(['Source_Plate_384', 'norm_source_well']).size().reset_index(name='Actual_Pool_Count')
                 
-                reconciled_df = pd.merge(reconciled_df, pool_counts, on=['Source_Plate_384', 'norm_source_well'], how='left')
+                reconciled_df = pd.merge(reconciled_df.drop(columns=['Actual_Pool_Count'], errors='ignore'), pool_counts, on=['Source_Plate_384', 'norm_source_well'], how='left')
                 reconciled_df['Compounds_In_Pool'] = reconciled_df['Actual_Pool_Count']
                 reconciled_df['Actual_Pool_Size'] = reconciled_df['Actual_Pool_Count']
                 
-                reconciled_df['Total_Compound_Fluid_nL'] = reconciled_df['Compounds_In_Pool'] * aliquot_vol_nl_recon
+                reconciled_df['Total_Compound_Fluid_nL'] = reconciled_df['Compounds_In_Pool'] * vol_per_comp
                 reconciled_df['DMSO_Backflush_Volume_nL'] = (target_total_nl - reconciled_df['Total_Compound_Fluid_nL']).clip(lower=0.0)
                 reconciled_df['Backflush_Required'] = reconciled_df['DMSO_Backflush_Volume_nL'].apply(lambda x: "YES" if x > 0 else "NO")
                 
-                designated_max = orig_df['Designated_Pool_Size'].iloc[0] if 'Designated_Pool_Size' in orig_df.columns else 10
+                designated_max = orig_df['Designated_Pool_Size'].iloc[0] if 'Designated_Pool_Size' in orig_df.columns else pool_size
                 reconciled_df['Pool_Status'] = reconciled_df.apply(
                     lambda r: "COMPLETE" if r['Actual_Pool_Count'] == designated_max else f"⚠️ INCOMPLETE ({r['Actual_Pool_Count']}/{designated_max})", axis=1
                 )
@@ -1035,7 +1033,7 @@ with tab4:
                 with p_col2:
                     topup_rows = []
                     for dw, f_cnt in failed_counts_by_well.items():
-                        delta_nl = f_cnt * aliquot_vol_nl_recon
+                        delta_nl = f_cnt * vol_per_comp
                         plt = orig_df[orig_df['norm_source_well'] == dw]['Source_Plate_384'].iloc[0] if not orig_df[orig_df['norm_source_well'] == dw].empty else 'ASMS_NPC_SRC_PLT_1'
                         topup_rows.append({
                             'Source Plate Name': 'DMSO_SOURCE',
